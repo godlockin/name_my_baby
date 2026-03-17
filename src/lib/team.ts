@@ -19,8 +19,8 @@ import {
   HISTORY_AGENT,
   ENGLISH_AGENT,
   AGGREGATOR_AGENT,
-} from "./base";
-import { buildConstraints, isPremiumUser } from "../utils";
+} from "./agents";
+import { buildConstraints, isPremiumUser } from "./utils";
 
 export interface AgentTeamOptions {
   apiKey: string;

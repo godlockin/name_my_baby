@@ -3,14 +3,30 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "wrangler pages dev .next --port 3000",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./apps/workers/src/db/migrations/001_init.sql",
-    "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./apps/workers/src/db/migrations/001_init.sql"
+    "pages:build": "npx @cloudflare/next-on-pages",
+    "preview": "npm run pages:build && wrangler pages dev .vercel/output/static",
+    "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static",
+    "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./src/db/migrations/001_init.sql",
+    "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./src/db/migrations/001_init.sql"
   },
-  "workspaces": [
-    "apps/*"
-  ]
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2",
+    "hono": "^4.3.6",
+    "@google/generative-ai": "^0.11.4"
+  },
+  "devDependencies": {
+    "@cloudflare/next-on-pages": "^1.12.1",
+    "@types/node": "^20.12.12",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.4.5",
+    "wrangler": "^3.63.1"
+  }
 }

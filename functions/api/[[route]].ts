@@ -1,10 +1,10 @@
-// Cloudflare Worker Entry Point
+// Cloudflare Pages Functions - API Entry
 
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { AgentTeam } from "./agents/team";
-import { generateInviteCode, generateSessionId, validateInput } from "./utils";
-import { UserInput, InviteCode, UserSession } from "./types";
+import { AgentTeam } from "../../lib/team";
+import { generateInviteCode, generateSessionId, validateInput } from "../../lib/utils";
+import { UserInput } from "../../types";
 
 interface Env {
   DB: D1Database;
@@ -22,7 +22,7 @@ app.use("/*", cors());
 // ============================================================================
 
 // POST /api/generate - Submit form and generate names
-app.post("/api/generate", async (c) => {
+app.post("/generate", async (c) => {
   try {
     const body = await c.req.json();
     const input: UserInput = body;
@@ -102,7 +102,7 @@ app.post("/api/generate", async (c) => {
 });
 
 // GET /api/job/:id - Get generation status/result
-app.get("/api/job/:id", async (c) => {
+app.get("/job/:id", async (c) => {
   try {
     const sessionId = c.req.param("id");
 
@@ -130,7 +130,7 @@ app.get("/api/job/:id", async (c) => {
 });
 
 // POST /api/invite/verify - Verify invite code
-app.post("/api/invite/verify", async (c) => {
+app.post("/invite/verify", async (c) => {
   try {
     const { code } = await c.req.json();
 
@@ -148,7 +148,7 @@ app.post("/api/invite/verify", async (c) => {
 });
 
 // POST /api/invite/use - Use invite code (reserve it)
-app.post("/api/invite/use", async (c) => {
+app.post("/invite/use", async (c) => {
   try {
     const { code, deviceId, phone } = await c.req.json();
 
@@ -185,7 +185,7 @@ app.post("/api/invite/use", async (c) => {
 });
 
 // GET /api/history - Get user's history
-app.get("/api/history", async (c) => {
+app.get("/history", async (c) => {
   try {
     const deviceId = c.req.query("deviceId");
 
@@ -288,4 +288,4 @@ async function verifyInviteCode(db: D1Database, code: string): Promise<{ valid: 
   return { valid: true };
 }
 
-export default app;
+export const onRequest = app.fetch;
