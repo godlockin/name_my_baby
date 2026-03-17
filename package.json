@@ -1,0 +1,16 @@
+{
+  "name": "name-my-baby",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler pages dev .next --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./apps/workers/src/db/migrations/001_init.sql",
+    "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./apps/workers/src/db/migrations/001_init.sql"
+  },
+  "workspaces": [
+    "apps/*"
+  ]
+}

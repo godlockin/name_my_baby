@@ -1,0 +1,11 @@
+[["vars"]]
+environment = "development"
+
+[["d1_databases"]]
+binding = "DB"
+database_name = "name-my-baby-db"
+database_id = "CHANGE_ME_TO_YOUR_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "name-my-baby-storage"
