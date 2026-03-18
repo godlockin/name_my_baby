@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { NameScheme } from "../types";
 
 interface ChildInfo {
   id: string;
@@ -24,8 +25,8 @@ interface WorkflowState {
   generationStatus: "idle" | "processing" | "completed" | "failed";
 
   // Results
-  names: any[];
-  savedNames: any[];
+  names: NameScheme[];
+  savedNames: NameScheme[];
 
   // Actions
   setFatherName: (name: string) => void;
@@ -43,8 +44,8 @@ interface WorkflowState {
   startGeneration: () => void;
   setSessionId: (id: string) => void;
   setGenerationStatus: (status: "idle" | "processing" | "completed" | "failed") => void;
-  setNames: (names: any[]) => void;
-  saveName: (name: any) => void;
+  setNames: (names: NameScheme[]) => void;
+  saveName: (name: NameScheme) => void;
   removeSavedName: (id: string) => void;
   reset: () => void;
 }
@@ -147,9 +148,9 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   setGenerationStatus: (status) => set({ generationStatus: status, isGenerating: status === "processing" }),
 
-  setNames: (names) => set({ names }),
+  setNames: (names: NameScheme[]) => set({ names }),
 
-  saveName: (name) => {
+  saveName: (name: NameScheme) => {
     const saved = get().savedNames;
     if (!saved.find((n) => n.id === name.id)) {
       set({ savedNames: [...saved, name] });

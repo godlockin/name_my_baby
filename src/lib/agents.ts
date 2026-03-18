@@ -1,24 +1,89 @@
-// Base Agent class and prompt templates
+/**
+ * Base Agent module for running AI agents via Gemini API
+ *
+ * Provides a generic agent runner that executes prompts with structured JSON output.
+ * Each agent has a specific persona and system prompt for its domain expertise.
+ *
+ * @module agents
+ */
 
-import { AgentOutput, Constraints, UserInput } from "../types";
+import { AgentOutput, Constraints, BaziData, HomophoneData, PoetryData, HistoryData, EnglishData } from "../types";
 
+/**
+ * Agent configuration defining persona and behavior
+ */
 export interface AgentConfig {
+  /** Agent display name */
   name: string;
+  /** Agent persona description (tone, style) */
   persona: string;
+  /** System prompt that defines the agent's task and output format */
   systemPrompt: string;
 }
 
+/**
+ * Options for running an agent
+ */
 export interface AgentRunOptions {
+  /** Context to include in the prompt (e.g., user input) */
   context: string;
+  /** Optional constraints for the agent to follow */
   constraints?: Constraints;
 }
 
-// Base agent runner using Gemini API
+/**
+ * Gemini API response structure
+ */
+interface GeminiResponse {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text: string;
+      }>;
+    };
+  }>;
+}
+
+/**
+ * Structured error with context for Gemini API failures
+ */
+interface GeminiApiError extends Error {
+  code?: string;
+  status?: number;
+}
+
+/**
+ * Creates a Gemini API error with context
+ */
+function createGeminiError(message: string, status?: number): GeminiApiError {
+  const error = new Error(message) as GeminiApiError;
+  error.status = status;
+  return error;
+}
+
+/**
+ * Runs an agent with the given configuration and options
+ *
+ * @param config - Agent configuration (name, persona, system prompt)
+ * @param options - Run options (context, constraints)
+ * @param apiKey - Gemini API key
+ * @returns AgentOutput with status and data
+ *
+ * @example
+ * ```typescript
+ * const result = await runAgent<BaziData>(BAZI_AGENT, { context: userInput }, apiKey);
+ * if (result.status === "success") {
+ *   console.log(result.data.eightChars);
+ * }
+ * ```
+ */
 export async function runAgent<T>(
   config: AgentConfig,
   options: AgentRunOptions,
   apiKey: string
 ): Promise<AgentOutput<T>> {
+  const agentContext = { agentName: config.name };
+
   try {
     const prompt = buildPrompt(config, options);
 
@@ -49,10 +114,11 @@ export async function runAgent<T>(
     );
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      const errorBody = await response.text().catch(() => "Unknown body");
+      throw createGeminiError(`Gemini API error: ${response.status} ${response.statusText}`, response.status);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as GeminiResponse;
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!content) {
@@ -63,23 +129,62 @@ export async function runAgent<T>(
       };
     }
 
-    const parsed = JSON.parse(content);
+    // Parse JSON with explicit error handling
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError: unknown) {
+      const errorMessage = parseError instanceof Error ? parseError.message : "Invalid JSON";
+      console.error(`Agent ${config.name} JSON parse error:`, errorMessage, "Content:", content);
+      return {
+        status: "failed",
+        data: {} as T,
+        notes: `JSON parse failed: ${errorMessage}`,
+      };
+    }
+
+    // Type guard: ensure parsed data has expected structure
+    if (typeof parsed !== "object" || parsed === null) {
+      return {
+        status: "failed",
+        data: {} as T,
+        notes: "Invalid response format: expected object",
+      };
+    }
 
     return {
       status: "success",
       data: parsed as T,
-      notes: parsed.notes || "",
+      notes: isRecordWithNotes(parsed) ? String(parsed.notes || "") : "",
     };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error(`Agent ${config.name} error:`, error);
+
     return {
       status: "failed",
       data: {} as T,
-      notes: error instanceof Error ? error.message : "Unknown error",
+      notes: errorMessage,
     };
   }
 }
 
+/**
+ * Type guard: checks if object has a 'notes' property
+ */
+function isRecordWithNotes(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "notes" in value &&
+    (typeof (value as Record<string, unknown>).notes === "string" ||
+      (value as Record<string, unknown>).notes === undefined)
+  );
+}
+
+/**
+ * Builds the complete prompt from agent config and options
+ */
 function buildPrompt(config: AgentConfig, options: AgentRunOptions): string {
   let prompt = `${config.systemPrompt}\n\n`;
 
@@ -103,10 +208,16 @@ ${formatConstraints(options.constraints)}
   return prompt;
 }
 
+/**
+ * Formats user input for the prompt
+ */
 function formatUserInput(context: string): string {
   return context;
 }
 
+/**
+ * Formats constraints for the prompt
+ */
 function formatConstraints(constraints: Constraints): string {
   const lines: string[] = [];
 
@@ -125,9 +236,13 @@ function formatConstraints(constraints: Constraints): string {
 // Agent Configurations
 // ============================================================================
 
+/**
+ * Bazi (Eight Characters) Agent
+ * Analyzes four pillars and five elements for naming recommendations
+ */
 export const BAZI_AGENT: AgentConfig = {
   name: "八字分析师",
-  persona: "你是一位研究四柱八字 40 年的易学老先生，说话略带古风，常用"此字..."、"此子八字..."等表达。",
+  persona: "你是一位研究四柱八字 40 年的易学老先生，说话略带古风，常用\"此字...\"、\"此子八字...\"等表达。",
   systemPrompt: `你是一位研究四柱八字 40 年的易学老先生。请根据用户的出生时间分析：
 
 1. 八字排盘（年柱、月柱、日柱、时柱）
@@ -150,6 +265,10 @@ export const BAZI_AGENT: AgentConfig = {
   }`
 };
 
+/**
+ * Homophone Analysis Agent
+ * Checks for pronunciation conflicts in various dialects
+ */
 export const HOMOPHONE_AGENT: AgentConfig = {
   name: "谐音梗专家",
   persona: "你是一位网感很强的语言学专家，说话现代直白，对网络流行语和方言谐音很敏感。",
@@ -174,6 +293,10 @@ export const HOMOPHONE_AGENT: AgentConfig = {
 }`
 };
 
+/**
+ * Poetry Analysis Agent
+ * Finds auspicious characters from classical Chinese poetry
+ */
 export const POETRY_AGENT: AgentConfig = {
   name: "古诗词专家",
   persona: "你是一位温文尔雅的文学教授，精通《诗经》《论语》《楚辞》等典籍，说话引经据典。",
@@ -199,6 +322,10 @@ export const POETRY_AGENT: AgentConfig = {
 }`
 };
 
+/**
+ * Historical Analysis Agent
+ * Analyzes historical allusions and cultural significance of characters
+ */
 export const HISTORY_AGENT: AgentConfig = {
   name: "历史学家",
   persona: "你是一位健谈的历史学教授，说话生动有趣，爱扯典故。",
@@ -221,6 +348,10 @@ export const HISTORY_AGENT: AgentConfig = {
 }`
 };
 
+/**
+ * English Naming Agent
+ * Recommends English names based on Chinese name meaning and pronunciation
+ */
 export const ENGLISH_AGENT: AgentConfig = {
   name: "英文语言学专家",
   persona: "你是一位专业的语言学博士，说话中英夹杂，重视词源。",
@@ -244,6 +375,10 @@ export const ENGLISH_AGENT: AgentConfig = {
 }`
 };
 
+/**
+ * European History Agent
+ * Provides mythology and historical context for English names
+ */
 export const EUROPE_HISTORY_AGENT: AgentConfig = {
   name: "欧洲历史专家",
   persona: "你是一位优雅的欧洲文化学者，爱讲神话故事。",
@@ -265,6 +400,10 @@ export const EUROPE_HISTORY_AGENT: AgentConfig = {
 }`
 };
 
+/**
+ * Aggregator Agent
+ * Synthesizes all expert analysis into final naming recommendations
+ */
 export const AGGREGATOR_AGENT: AgentConfig = {
   name: "汇总员",
   persona: "你是一位理性的产品经理，负责整合所有专家的意见。",

@@ -187,3 +187,123 @@ export interface UserSession {
   created_at: number;
   updated_at: number;
 }
+
+// ============================================================================
+// Database Record Types (for D1 query results)
+// ============================================================================
+
+/**
+ * Raw database record for invite_codes table
+ */
+export interface InviteCodeRecord {
+  code: string;
+  creator_device_id: string;
+  creator_phone: string | null;
+  used_by_device_id: string | null;
+  used_by_phone: string | null;
+  status: "available" | "used" | "expired";
+  created_at: number;
+  used_at: number | null;
+  expires_at: number;
+}
+
+/**
+ * Raw database record for user_sessions table
+ */
+export interface UserSessionRecord {
+  id: string;
+  device_id: string;
+  phone: string | null;
+  input_data: string;
+  result_data: string | null;
+  invite_code_used: string | null;
+  is_premium: number; // SQLite stores boolean as integer
+  created_at: number;
+  updated_at: number;
+}
+
+// ============================================================================
+// API Response Types
+// ============================================================================
+
+/**
+ * Standard API error response
+ */
+export interface ApiError {
+  error: string;
+  code: string;
+  reason?: string;
+  details?: string[];
+  retryAfter?: number;
+}
+
+/**
+ * POST /api/generate response
+ */
+export interface GenerateResponse {
+  sessionId: string;
+  status: "processing";
+  estimatedTime: number; // seconds
+}
+
+/**
+ * GET /api/job/:id response
+ */
+export interface JobStatusResponse {
+  sessionId: string;
+  status: "processing" | "completed" | "failed";
+  names?: NameScheme[];
+  isPremium?: boolean;
+  error?: string;
+}
+
+/**
+ * POST /api/invite/verify response
+ */
+export interface InviteVerifyResponse {
+  valid: boolean;
+  reason?: string;
+}
+
+/**
+ * POST /api/invite/use response
+ */
+export interface InviteUseResponse {
+  valid: boolean;
+  reason?: string;
+  message?: string;
+}
+
+/**
+ * GET /api/history response
+ */
+export interface HistorySession {
+  id: string;
+  input_data: string;
+  result_data: string | null;
+  invite_code_used: string | null;
+  is_premium: boolean;
+  created_at: number;
+}
+
+export interface HistoryResponse {
+  sessions: HistorySession[];
+}
+
+// ============================================================================
+// Admin API Response Types
+// ============================================================================
+
+/**
+ * POST /api/admin/invite/generate response
+ */
+export interface AdminGenerateInviteResponse {
+  codes: string[];
+}
+
+/**
+ * GET /api/admin/invite/list response
+ */
+export interface AdminListInviteResponse {
+  codes: InviteCodeRecord[];
+}

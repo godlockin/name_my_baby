@@ -61,7 +61,7 @@ export default function Home() {
         const response = await getJobStatus(sessionId);
         const data = response;
 
-        if (data.status === "completed") {
+        if (data.status === "completed" && data.names) {
           setNames(data.names);
           setGenerationStatus("completed");
         } else if (data.status === "processing") {

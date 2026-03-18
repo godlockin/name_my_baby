@@ -151,3 +151,45 @@ Each agent must output:
 - `docs/prd.md` - Product requirements
 - `docs/agent-design.md` - Agent team architecture
 - `docs/invite-code-design.md` - Invite code system design
+
+---
+
+## Development Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Start Next.js dev server (frontend)
+npm run dev
+
+# Build for production (verifies both Next.js and Functions)
+npm run build
+
+# Type check Functions only
+npm run check:functions
+
+# Type check Next.js only
+npm run check:next
+```
+
+### Local Development Setup
+
+```bash
+# 1. Create .env file with your Gemini API Key
+cp .env.example .env
+# Edit .env and add: GEMINI_API_KEY=your_key_here
+
+# 2. Initialize local D1 database
+npm run db:migrate
+
+# 3. Start development server
+npm run dev
+```
+
+Access the app at: http://localhost:3000
+
+### TypeScript Configuration
+
+- `tsconfig.json` - Next.js app (excludes `functions/`)
+- `functions/tsconfig.json` - Cloudflare Pages Functions (includes `@cloudflare/workers-types`)

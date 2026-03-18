@@ -1,4 +1,11 @@
-// Agent Team Orchestrator
+/**
+ * Agent Team Orchestrator
+ *
+ * Coordinates multiple specialized AI agents to generate baby naming recommendations.
+ * Uses a three-round process: foundation analysis, creative analysis, and aggregation.
+ *
+ * @module team
+ */
 
 import {
   SharedContext,
@@ -10,6 +17,7 @@ import {
   PoetryData,
   HistoryData,
   EnglishData,
+  Constraints,
 } from "../types";
 import {
   runAgent,
@@ -22,10 +30,29 @@ import {
 } from "./agents";
 import { buildConstraints, isPremiumUser } from "./utils";
 
+/**
+ * Configuration options for the Agent Team
+ */
 export interface AgentTeamOptions {
+  /** Gemini API key for accessing AI models */
   apiKey: string;
 }
 
+/**
+ * Agent Team class that orchestrates multiple AI agents
+ *
+ * The generation process follows a three-round pipeline:
+ * 1. Foundation Analysis (Bazi + Homophone check) - runs in parallel
+ * 2. Creative Analysis (Poetry + History + English) - runs in parallel
+ * 3. Aggregation - combines all results into final recommendations
+ *
+ * @example
+ * ```typescript
+ * const team = new AgentTeam({ apiKey: "your-api-key" });
+ * const context = { sessionId: "123", userInput: input };
+ * const names = await team.generate(context);
+ * ```
+ */
 export class AgentTeam {
   private apiKey: string;
 
@@ -33,6 +60,13 @@ export class AgentTeam {
     this.apiKey = options.apiKey;
   }
 
+  /**
+   * Executes the full three-round generation pipeline
+   *
+   * @param context - Shared context containing session ID and user input
+   * @returns Array of name schemes with full analysis
+   * @throws Error if aggregation fails
+   */
   async generate(context: SharedContext): Promise<NameScheme[]> {
     const { userInput } = context;
 
@@ -79,31 +113,49 @@ export class AgentTeam {
     return finalNames;
   }
 
+  /**
+   * Runs the Bazi (Eight Characters) analysis agent
+   */
   private async runBaziAgent(input: UserInput): Promise<AgentOutput<BaziData>> {
     const context = this.formatInputContext(input);
     return runAgent<BaziData>(BAZI_AGENT, { context }, this.apiKey);
   }
 
+  /**
+   * Runs the homophone analysis agent
+   */
   private async runHomophoneAgent(input: UserInput): Promise<AgentOutput<HomophoneData>> {
     const context = this.formatInputContext(input);
     return runAgent<HomophoneData>(HOMOPHONE_AGENT, { context }, this.apiKey);
   }
 
-  private async runPoetryAgent(input: UserInput, constraints: any): Promise<AgentOutput<PoetryData>> {
+  /**
+   * Runs the poetry analysis agent with constraints
+   */
+  private async runPoetryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<PoetryData>> {
     const context = this.formatInputContext(input);
     return runAgent<PoetryData>(POETRY_AGENT, { context, constraints }, this.apiKey);
   }
 
-  private async runHistoryAgent(input: UserInput, constraints: any): Promise<AgentOutput<HistoryData>> {
+  /**
+   * Runs the history analysis agent with constraints
+   */
+  private async runHistoryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<HistoryData>> {
     const context = this.formatInputContext(input);
     return runAgent<HistoryData>(HISTORY_AGENT, { context, constraints }, this.apiKey);
   }
 
-  private async runEnglishAgent(input: UserInput, constraints: any): Promise<AgentOutput<EnglishData>> {
+  /**
+   * Runs the English naming agent with constraints
+   */
+  private async runEnglishAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<EnglishData>> {
     const context = this.formatInputContext(input);
     return runAgent<EnglishData>(ENGLISH_AGENT, { context, constraints }, this.apiKey);
   }
 
+  /**
+   * Creates an empty English result for non-premium users
+   */
   private createEmptyEnglishResult(): AgentOutput<EnglishData> {
     return {
       status: "success",
@@ -112,6 +164,13 @@ export class AgentTeam {
     };
   }
 
+  /**
+   * Aggregates all agent results into final name recommendations
+   *
+   * @param context - Context with all round results
+   * @returns Processed array of name schemes
+   * @throws Error if required round results are missing or aggregation fails
+   */
   private async aggregateResults(context: SharedContext): Promise<NameScheme[]> {
     const { userInput, round1, round2 } = context;
 
@@ -132,7 +191,7 @@ export class AgentTeam {
       isPremium,
     });
 
-    const result = await runAgent<{ nameSchemes: any[] }>(
+    const result = await runAgent<{ nameSchemes: NameScheme[] }>(
       AGGREGATOR_AGENT,
       { context: aggregationContext },
       this.apiKey
@@ -157,6 +216,9 @@ export class AgentTeam {
     return schemes;
   }
 
+  /**
+   * Formats user input into a context string for agent prompts
+   */
   private formatInputContext(input: UserInput): string {
     const childrenInfo = input.children
       .map(

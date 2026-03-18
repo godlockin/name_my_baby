@@ -8,6 +8,7 @@ node_modules/
 
 # Build output
 output/
+out/
 dist/
 .next/
 .vercel/
@@ -31,3 +32,8 @@ coverage/
 
 # Cloudflare
 .wrangler/
+
+# Tooling artifacts
+.playwright-mcp/
+.claude/settings.local.json
+.serena/

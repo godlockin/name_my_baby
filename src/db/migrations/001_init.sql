@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS invite_codes (
 -- Index for looking up by device
 CREATE INDEX IF NOT EXISTS idx_invite_codes_creator ON invite_codes(creator_device_id);
 CREATE INDEX IF NOT EXISTS idx_invite_codes_status ON invite_codes(status);
+-- Composite index for status + expiration checks (common query pattern)
+CREATE INDEX IF NOT EXISTS idx_invite_codes_status_expires ON invite_codes(status, expires_at);
 
 -- User sessions table
 CREATE TABLE IF NOT EXISTS user_sessions (
