@@ -17,179 +17,158 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
-### Agent Team (混合协作模式)
+### Code Structure
+
+```
+src/
+├── app/              # Next.js app router pages
+├── components/       # React components (StepForm, ResultsList, etc.)
+├── lib/
+│   ├── agents.ts     # Base Agent runner + 7 agent configs
+│   ├── team.ts       # AgentTeam orchestrator (3-round pipeline)
+│   ├── utils.ts      # Helpers (validation, constraint building)
+│   └── api.ts        # Frontend API client
+├── stores/
+│   └── workflow.ts   # Zustand state management
+└── types/
+    └── index.ts      # Shared type definitions
+
+functions/
+└── api/[[route]].ts  # Cloudflare Pages Functions (Hono router)
+
+docs/
+├── prd.md            # Product requirements
+├── agent-design.md   # Agent architecture
+└── invite-code-design.md
+```
+
+### Agent Pipeline (混合协作模式)
 
 ```
 Round 1 (并行): 八字分析师 + 谐音梗专家 → 生成约束条件
 Round 2 (并行): 古诗词专家 + 历史学家 + 英文专家 → 候选字/英文名
-Round 3 (串行): 汇总员 → 组合方案 + 复审
-Round 4 (输出): Layer 1 简要版 → Layer 2 详细版 (按需展开)
+Round 3 (聚合): 汇总员 → 组合方案 + 复审
+输出：Layer 1 简要版 → Layer 2 详细版 (按需展开)
 ```
 
-### Agent 角色
+### 技术栈
 
-| Agent | 职责 | 人设 |
-|-------|------|------|
-| 八字分析师 | 五行喜忌、用字建议 | 玄学老先生 |
-| 谐音梗专家 | 全维度谐音检查 | 网感年轻人 |
-| 古诗词专家 | 典籍出处考据 (分级标注) | 文学教授 |
-| 历史学家 | 历史典故分析 | 博学大叔 |
-| 英文语言学专家 | 英文名推荐 + 词源 | 海归精英 |
-| 欧洲历史专家 | 英文名典故来源 | 文化学者 |
-| 汇总员 | 整合所有输出生成方案 | 产品经理 |
-
-### 技术选型
-
-- **前端**: Next.js 14+ (Web + 小程序)
-- **部署**: Cloudflare Pages
-- **存储**: Cloudflare R2
-- **Agent 框架**: 待定 (需支持多 Agent 协作)
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 15 + React 18 + TypeScript |
+| State | Zustand |
+| Styling | Tailwind CSS |
+| Backend | Cloudflare Pages Functions + Hono |
+| Database | Cloudflare D1 (SQLite) |
+| Storage | Cloudflare R2 |
+| AI | Google Gemini 2.0 Flash |
 
 ---
 
-## Key Design Patterns
+## API Routes (Hono in functions/api/[[route]].ts)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/generate` | Submit form, run agent team, store results |
+| GET | `/api/job/:id` | Poll for generation status/results |
+| POST | `/api/invite/verify` | Verify invite code validity |
+| POST | `/api/invite/use` | Reserve invite code |
+| GET | `/api/history?deviceId=` | Get user's session history |
+| POST | `/api/admin/invite/generate` | Generate invite codes (admin) |
+| GET | `/api/admin/invite/list` | List invite codes (admin) |
+
+---
+
+## Database Schema (D1)
+
+### invite_codes
+```sql
+code TEXT PRIMARY KEY,
+creator_device_id TEXT, creator_phone TEXT,
+used_by_device_id TEXT, used_by_phone TEXT,
+status TEXT CHECK(status IN ('available', 'used', 'expired')),
+created_at, used_at, expires_at INTEGER
+```
+
+### user_sessions
+```sql
+id TEXT PRIMARY KEY,
+device_id TEXT, phone TEXT,
+input_data TEXT, result_data TEXT,
+invite_code_used TEXT, is_premium INTEGER,
+created_at, updated_at INTEGER
+```
+
+---
+
+## Key Patterns
 
 ### Shared Context Pattern
+Agents read/write to a shared `SharedContext` object passed through the pipeline.
 
-All agents read/write to a shared JSON context:
+### Constraint Propagation
+Round 1 outputs (`recommendedRadicals`, `forbiddenChars`) filter Round 2 search space.
+
+### Layered Output
+- **Layer 1**: Name cards with minimal info
+- **Layer 2**: Full analysis expanded on demand
+
+### Agent Output Contract
 ```typescript
-interface SharedContext {
-  session_id: string;
-  user_input: UserInput;
-  round1: { bazi_analysis: Analysis; homophone_check: HomophoneResult };
-  round2: { candidate_chars: CandidateChar[]; candidate_names: string[] };
-  round3: { final_review: FinalReview };
+interface AgentOutput<T> {
+  status: "success" | "failed" | "timeout";
+  data: T;
+  notes: string;
 }
 ```
 
-### Layered Output Pattern
-
-- **Layer 1**: 3-5 name cards with name + English name + one-sentence meaning
-- **Layer 2**: Detailed analysis (Five Elements, homophone, references, etymology)
-
-### Constraint Propagation
-
-Round 1 agents generate constraints that filter Round 2 search space:
-- `must_have` / `avoid` radicals from Bazi analysis
-- `forbidden_chars` from homophone check
-
 ---
 
-## Development Guidelines
+## State Management (Zustand)
 
-### Type Safety
+`src/stores/workflow.ts` manages:
+- Form data (parent names, children info, preferences)
+- UI state (current step, generation status)
+- Results (generated names, saved names)
 
-Use `unknown` + type guards for external data, never `any`. Define interfaces for all API responses and Agent outputs.
-
-### Agent Output Contracts
-
-Each agent must output:
-1. `status: "success" | "failed"`
-2. `data`: Structured JSON
-3. `constraints`: For downstream agents
-4. `notes`: Human-readable explanation
-
-### Error Handling
-
-- Timeout per agent: 5s
-- Degraded output: Continue with available results if single agent times out
-- Startup validation: Fail immediately on missing env vars (API keys)
-
-### Cost Optimization
-
-- Parallel execution where possible
-- Cache/reuse identical analyses
-- Constraint-filtered search space
--分层 output (load detailed analysis on-demand)
-
----
-
-## Data Model
-
-### User Input (必填)
-- Father name, Mother name
-- Children count (1-4), each child's gender + birth time
-
-### User Input (选填)
-- Generation character (字辈)
-- Style preference (自由描述)
-- Special requests
-- Phone number (for user identification)
-
-### Storage (Cloudflare R2)
-- User input (linked to Device ID + timestamp)
-- Generated results
-- Phone number (optional, for cross-device linking)
-
----
-
-## Invite Code System
-
-- **Format**: 6 chars (AB3X9K) - ~160M combinations
-- **Usage**: 1 invite code = 1 full generation (one-time use, bound to user)
-- **Anti-fraud**: Device ID + phone verification + IP rate limiting
-- **Expiry**: 30 days
-
----
-
-## Visual Design
-
-| Element | Value | Usage |
-|---------|-------|-------|
-| 朱砂红 | `#C44536` | Primary buttons, emphasis |
-| 米白色 | `#F8F4E8` | Background |
-| 墨色 | `#2C2C2C` | Body text |
-| 淡金 | `#D4AF37` | Premium features |
-
-- **Fonts**: 思源宋体 (titles), 思源黑体 (body)
-- **Style**: Minimal Chinese decorative elements (云纹/回纹/印章)
-
----
-
-## Documentation
-
-- `docs/prd.md` - Product requirements
-- `docs/agent-design.md` - Agent team architecture
-- `docs/invite-code-design.md` - Invite code system design
+Key actions: `nextStep`, `prevStep`, `startGeneration`, `saveName`, `reset`
 
 ---
 
 ## Development Commands
 
 ```bash
-# Install dependencies
-npm install
-
-# Start Next.js dev server (frontend)
-npm run dev
-
-# Build for production (verifies both Next.js and Functions)
-npm run build
-
-# Type check Functions only
-npm run check:functions
-
-# Type check Next.js only
-npm run check:next
+npm install                    # Install dependencies
+npm run dev                    # Next.js dev server
+npm run build                  # Build for production
+npm run pages:build            # Build for Cloudflare Pages
+npm run preview                # Local preview with Wrangler
+npm run deploy                 # Deploy to Cloudflare Pages
+npm run db:migrate             # Run D1 migrations (local)
+npm run db:migrate:prod        # Run D1 migrations (production)
+npm run check:functions        # Type check Functions
+npm run check:next             # Type check Next.js
+npm run lint                   # ESLint
 ```
 
-### Local Development Setup
+### Local Setup
 
 ```bash
-# 1. Create .env file with your Gemini API Key
-cp .env.example .env
-# Edit .env and add: GEMINI_API_KEY=your_key_here
-
-# 2. Initialize local D1 database
-npm run db:migrate
-
-# 3. Start development server
-npm run dev
+cp .env.example .env           # Create .env
+# Add: GEMINI_API_KEY=your_key_here
+npm run db:migrate             # Initialize D1
+npm run dev                    # Start at http://localhost:3000
 ```
 
-Access the app at: http://localhost:3000
+---
 
-### TypeScript Configuration
+## Visual Design
 
-- `tsconfig.json` - Next.js app (excludes `functions/`)
-- `functions/tsconfig.json` - Cloudflare Pages Functions (includes `@cloudflare/workers-types`)
+| Element | Value |
+|---------|-------|
+| 朱砂红 | `#C44536` |
+| 米白色 | `#F8F4E8` |
+| 墨色 | `#2C2C2C` |
+| 淡金 | `#D4AF37` |
+
+Fonts: 思源宋体 (titles), 思源黑体 (body)

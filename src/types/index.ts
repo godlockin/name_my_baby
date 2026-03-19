@@ -13,6 +13,7 @@ export interface UserInput {
   specialRequests?: string;
   phone?: string;
   inviteCode?: string;
+  deviceId?: string;
 }
 
 export interface ChildInfo {

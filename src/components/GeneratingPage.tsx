@@ -1,13 +1,7 @@
 "use client";
 
 import React from "react";
-
-interface GeneratingPageProps {
-  status?: "processing" | "completed" | "failed";
-  progress?: number;
-  currentStage?: string;
-  stages?: StageInfo[];
-}
+import { useWorkflowStore } from "../stores/workflow";
 
 interface StageInfo {
   key: string;
@@ -16,24 +10,53 @@ interface StageInfo {
   icon: React.ReactNode;
 }
 
-export const GeneratingPage: React.FC<GeneratingPageProps> = ({
-  status = "processing",
-  progress = 0,
-  currentStage = "",
-  stages = defaultStages,
-}) => {
+export const GeneratingPage: React.FC = () => {
+  const { generationStatus } = useWorkflowStore();
+  const [progress, setProgress] = React.useState(0);
+  const [currentStage, setCurrentStage] = React.useState("analyze");
+
+  // Simulate progress based on status
+  React.useEffect(() => {
+    if (generationStatus !== "processing") return;
+
+    const stages = ["analyze", "generate", "evaluate", "finalize"];
+    const stageIndex = stages.indexOf(currentStage);
+    const targetProgress = ((stageIndex + 1) / stages.length) * 100;
+
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= targetProgress) return prev;
+        return Math.min(prev + 1, targetProgress);
+      });
+    }, 100);
+
+    // Advance stage every 2 seconds
+    const stageTimeout = setTimeout(() => {
+      const nextIndex = (stageIndex + 1) % stages.length;
+      if (nextIndex < stages.length) {
+        setCurrentStage(stages[nextIndex]);
+      }
+    }, 2000);
+
+    return () => {
+      clearInterval(progressInterval);
+      clearTimeout(stageTimeout);
+    };
+  }, [generationStatus, currentStage]);
+
   const getStageStatus = (stageKey: string) => {
+    const stages = defaultStages;
     const currentIndex = stages.findIndex((s) => s.key === currentStage);
     const stageIndex = stages.findIndex((s) => s.key === stageKey);
 
-    if (status === "failed") return "error";
-    if (status === "completed") return "completed";
+    if (generationStatus === "failed") return "error";
+    if (generationStatus === "completed") return "completed";
     if (stageIndex < currentIndex) return "completed";
     if (stageIndex === currentIndex) return "active";
     return "pending";
   };
 
-  if (status === "failed") {
+  if (generationStatus === "failed") {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
         <div className="card-chinese text-center max-w-md w-full">
@@ -131,7 +154,7 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({
 
         {/* Stages */}
         <div className="space-y-4">
-          {stages.map((stage) => {
+          {defaultStages.map((stage) => {
             const stageStatus = getStageStatus(stage.key);
             return (
               <div
