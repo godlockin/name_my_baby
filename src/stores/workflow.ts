@@ -1,11 +1,5 @@
 import { create } from "zustand";
-import type { NameScheme } from "../types";
-
-interface ChildInfo {
-  id: string;
-  gender: "male" | "female";
-  birthTime: string;
-}
+import type { NameScheme, ChildInfo } from "../types";
 
 interface WorkflowState {
   // Form data

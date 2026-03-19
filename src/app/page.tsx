@@ -16,6 +16,8 @@ export default function Home() {
   } = useWorkflowStore();
 
   const [deviceId, setDeviceId] = useState("");
+  const [pollRetries, setPollRetries] = useState(0);
+  const MAX_POLL_RETRIES = 3;
 
   useEffect(() => {
     // Get or create device ID
@@ -28,27 +30,29 @@ export default function Home() {
   }, []);
 
   const handleFormSubmit = async () => {
-    startGeneration();
-
     const state = useWorkflowStore.getState();
 
+    const data = {
+      fatherName: state.fatherName,
+      motherName: state.motherName,
+      children: state.children,
+      generationChar: state.generationChar,
+      stylePreference: state.stylePreference,
+      specialRequests: state.specialRequests,
+      phone: state.phone,
+      inviteCode: state.inviteCode,
+      deviceId,
+    };
+
+    startGeneration();
+
     try {
-      const data = {
-        fatherName: state.fatherName,
-        motherName: state.motherName,
-        children: state.children,
-        generationChar: state.generationChar,
-        stylePreference: state.stylePreference,
-        specialRequests: state.specialRequests,
-        phone: state.phone,
-        inviteCode: state.inviteCode,
-        deviceId,
-      };
 
       const response = await generateName(data);
 
       if (response.sessionId) {
         setSessionId(response.sessionId);
+        setPollRetries(0); // Reset retry counter on new submission
         pollResults(response.sessionId);
       }
     } catch (error) {
@@ -66,14 +70,23 @@ export default function Home() {
         if (data.status === "completed" && data.names) {
           setNames(data.names);
           setGenerationStatus("completed");
+          setPollRetries(0);
         } else if (data.status === "processing") {
+          setPollRetries(0); // Reset on successful poll
           setTimeout(poll, 2000);
         } else {
           setGenerationStatus("failed");
         }
       } catch (error) {
         console.error("Poll error:", error);
-        setGenerationStatus("failed");
+        // Retry logic with max retries
+        if (pollRetries < MAX_POLL_RETRIES) {
+          setPollRetries((prev) => prev + 1);
+          setTimeout(poll, 2000);
+        } else {
+          setGenerationStatus("failed");
+          setPollRetries(0);
+        }
       }
     };
 
@@ -87,7 +100,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-center mb-8">AI 起名助手</h1>
           {generationStatus === "processing" && (
-            <GeneratingPage />
+            <GeneratingPage onRetry={handleFormSubmit} />
           )}
           {generationStatus === "completed" && (
             <ResultsList />
@@ -97,9 +110,24 @@ export default function Home() {
     );
   }
 
+  // Show error page with retry option
+  if (generationStatus === "failed") {
+    return (
+      <main className="min-h-screen p-8">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-center mb-8">AI 起名助手</h1>
+          <GeneratingPage onRetry={handleFormSubmit} />
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen p-8">
-      <div className="max-w-2xl mx-auto">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-[var(--color-primary)] focus:text-white focus:rounded-lg">
+        Skip to main content
+      </a>
+      <div className="max-w-2xl mx-auto" id="main-content">
         <h1 className="text-3xl font-bold text-center mb-8">AI 起名助手</h1>
         <StepForm onSubmit={handleFormSubmit} />
       </div>

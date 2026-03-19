@@ -85,8 +85,7 @@ export const InviteCodePanel: React.FC<InviteCodePanelProps> = ({
 
   return (
     <div
-      className={`card-chinese ${className}`}
-      style={{ borderColor: isVerified ? "var(--color-success)" : undefined }}
+      className={`card-chinese ${className} ${isVerified ? "border-[var(--color-success)]" : ""}`}
     >
       {/* Header */}
       <div
@@ -112,7 +111,7 @@ export const InviteCodePanel: React.FC<InviteCodePanelProps> = ({
             )}
           </div>
           <div>
-            <h3 className="font-semibold" style={{ color: "var(--color-text)" }}>
+            <h3 className="font-semibold text-[var(--color-text)]">
               {isVerified ? "已激活会员权益" : "邀请码"}
             </h3>
             <p className="text-sm text-gray-500">
@@ -237,7 +236,7 @@ export const InviteCodePanel: React.FC<InviteCodePanelProps> = ({
               {/* Benefits List (after verification) */}
               {status?.benefits && (
                 <div className="mt-3 p-3 rounded-lg bg-[rgba(212, 175, 55, 0.1)]">
-                  <p className="text-sm font-medium mb-2" style={{ color: "var(--color-text)" }}>
+                  <p className="text-sm font-medium mb-2 text-[var(--color-text)]">
                     已解锁权益：
                   </p>
                   <ul className="space-y-1">

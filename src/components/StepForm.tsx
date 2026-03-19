@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useWorkflowStore } from "../stores/workflow";
+import InviteCodePanel from "./InviteCodePanel";
 
 interface StepFormProps {
   onStepChange?: (step: "family" | "children" | "preferences") => void;
@@ -21,6 +22,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
     generationChar,
     stylePreference,
     specialRequests,
+    inviteCode,
     currentStep,
     setFatherName,
     setMotherName,
@@ -30,6 +32,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
     setGenerationChar,
     setStylePreference,
     setSpecialRequests,
+    setInviteCode,
     nextStep,
     prevStep,
   } = useWorkflowStore();
@@ -94,6 +97,8 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
     return errors.find((e) => e.field === field)?.message;
   };
 
+  const errorId = (field: string) => `error-${field}`;
+
   const steps: { key: "family" | "children" | "preferences"; label: string }[] = [
     { key: "family", label: "家庭信息" },
     { key: "children", label: "子女信息" },
@@ -141,7 +146,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
       <form onSubmit={handleSubmit} className="card-chinese animate-fade-in">
         {currentStep === "family" && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-center mb-6" style={{ color: "var(--color-text)" }}>
+            <h2 className="text-xl font-semibold text-center mb-6 text-[var(--color-text)]">
               家庭信息
             </h2>
 
@@ -154,9 +159,13 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
                 value={fatherName}
                 onChange={(e) => setFatherName(e.target.value)}
                 disabled={false}
+                aria-invalid={!!getError("fatherName")}
+                aria-describedby={getError("fatherName") ? errorId("fatherName") : undefined}
               />
               {getError("fatherName") && (
-                <p className="text-sm text-[var(--color-error)] mt-1">{getError("fatherName")}</p>
+                <p id={errorId("fatherName")} className="text-sm text-[var(--color-error)] mt-1" role="alert">
+                  {getError("fatherName")}
+                </p>
               )}
             </div>
 
@@ -168,15 +177,19 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
                 placeholder="请输入母亲姓名"
                 value={motherName}
                 onChange={(e) => setMotherName(e.target.value)}
+                aria-invalid={!!getError("motherName")}
+                aria-describedby={getError("motherName") ? errorId("motherName") : undefined}
               />
               {getError("motherName") && (
-                <p className="text-sm text-[var(--color-error)] mt-1">{getError("motherName")}</p>
+                <p id={errorId("motherName")} className="text-sm text-[var(--color-error)] mt-1" role="alert">
+                  {getError("motherName")}
+                </p>
               )}
             </div>
 
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "rgba(212, 175, 55, 0.1)" }}>
-              <p className="text-sm" style={{ color: "var(--color-text)" }}>
-                <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>提示：</span>
+            <div className="p-4 rounded-lg bg-[rgba(212,175,55,0.1)]">
+              <p className="text-sm text-[var(--color-text)]">
+                <span className="text-[var(--color-primary)] font-semibold">提示：</span>
                 我们将根据父母姓名结合传统文化，为宝宝选取吉祥好名
               </p>
             </div>
@@ -186,7 +199,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
         {currentStep === "children" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold" style={{ color: "var(--color-text)" }}>
+              <h2 className="text-xl font-semibold text-[var(--color-text)]">
                 子女信息
               </h2>
               <button
@@ -201,15 +214,18 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
             {children.map((child, index) => (
               <div
                 key={child.id}
-                className="p-4 rounded-lg border space-y-4"
-                style={{ borderColor: "rgba(196, 69, 54, 0.2)" }}
+                className="p-4 rounded-lg border space-y-4 border-[rgba(196,69,54,0.2)]"
               >
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium">孩子 {index + 1}</h3>
                   {children.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeChild(child.id)}
+                      onClick={() => {
+                        if (window.confirm(`确定要删除孩子 ${index + 1} 的信息吗？此操作不可恢复。`)) {
+                          removeChild(child.id);
+                        }
+                      }}
                       className="text-sm text-[var(--color-error)] hover:underline"
                     >
                       删除
@@ -241,9 +257,18 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
                       onChange={(e) =>
                         updateChild(child.id, { birthTime: e.target.value })
                       }
+                      aria-invalid={!!getError(`child-${index}-birthTime`)}
+                      aria-describedby={getError(`child-${index}-birthTime`) ? errorId(`child-${index}-birthTime`) : undefined}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      格式：YYYY-MM-DD HH:MM
+                    </p>
                     {getError(`child-${index}-birthTime`) && (
-                      <p className="text-sm text-[var(--color-error)] mt-1">
+                      <p
+                        id={errorId(`child-${index}-birthTime`)}
+                        className="text-sm text-[var(--color-error)] mt-1"
+                        role="alert"
+                      >
                         {getError(`child-${index}-birthTime`)}
                       </p>
                     )}
@@ -252,9 +277,9 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
               </div>
             ))}
 
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "rgba(212, 175, 55, 0.1)" }}>
-              <p className="text-sm" style={{ color: "var(--color-text)" }}>
-                <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>提示：</span>
+            <div className="p-4 rounded-lg bg-[rgba(212,175,55,0.1)]">
+              <p className="text-sm text-[var(--color-text)]">
+                <span className="text-[var(--color-primary)] font-semibold">提示：</span>
                 出生时间用于计算八字五行，帮助选取平衡命理的好名字
               </p>
             </div>
@@ -263,7 +288,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
 
         {currentStep === "preferences" && (
           <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-center mb-6" style={{ color: "var(--color-text)" }}>
+            <h2 className="text-xl font-semibold text-center mb-6 text-[var(--color-text)]">
               偏好设置
             </h2>
 
@@ -319,9 +344,15 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
               />
             </div>
 
-            <div className="p-4 rounded-lg" style={{ backgroundColor: "rgba(212, 175, 55, 0.1)" }}>
-              <p className="text-sm" style={{ color: "var(--color-text)" }}>
-                <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>提示：</span>
+            <InviteCodePanel
+              inviteCode={inviteCode}
+              onChange={setInviteCode}
+              className="mt-6"
+            />
+
+            <div className="p-4 rounded-lg bg-[rgba(212,175,55,0.1)]">
+              <p className="text-sm text-[var(--color-text)]">
+                <span className="text-[var(--color-primary)] font-semibold">提示：</span>
                 以上选项均为可选，不填写将根据传统文化自动匹配最佳名字
               </p>
             </div>

@@ -68,7 +68,15 @@ export async function generateName(input: UserInput): Promise<GenerateResponse> 
     throw new ApiRequestError(error);
   }
 
-  return response.json() as Promise<GenerateResponse>;
+  try {
+    return await response.json();
+  } catch (parseError) {
+    throw new ApiRequestError({
+      error: "Invalid response from server",
+      code: "PARSE_ERROR",
+      reason: "Response body is not valid JSON",
+    });
+  }
 }
 
 /**
@@ -102,7 +110,15 @@ export async function getJobStatus(sessionId: string): Promise<JobStatusResponse
     throw new ApiRequestError(error);
   }
 
-  return response.json() as Promise<JobStatusResponse>;
+  try {
+    return await response.json();
+  } catch (parseError) {
+    throw new ApiRequestError({
+      error: "Invalid response from server",
+      code: "PARSE_ERROR",
+      reason: "Response body is not valid JSON",
+    });
+  }
 }
 
 /**

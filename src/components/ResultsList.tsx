@@ -115,7 +115,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2" style={{ color: "var(--color-text)" }}>
+          <h1 className="text-3xl font-bold mb-2 text-[var(--color-text)]">
             起名结果
           </h1>
           <p className="text-gray-600">
@@ -173,7 +173,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+                    <h3 className="text-2xl font-bold text-[var(--color-text)]">
                       {name.name}
                     </h3>
                     <p className="text-sm text-gray-500">{name.pinyin}</p>

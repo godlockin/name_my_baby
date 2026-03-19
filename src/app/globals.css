@@ -48,6 +48,11 @@ h1, h2, h3, h4, h5, h6 {
   opacity: 0.9;
 }
 
+.btn-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 0 0 5px var(--color-primary);
+}
+
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -64,6 +69,11 @@ h1, h2, h3, h4, h5, h6 {
 
 .btn-secondary:hover {
   background-color: rgba(0, 0, 0, 0.05);
+}
+
+.btn-secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
 }
 
 /* Card styles */
@@ -95,6 +105,12 @@ h1, h2, h3, h4, h5, h6 {
 .input:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(196, 69, 54, 0.2);
 }
 
 .input-error {

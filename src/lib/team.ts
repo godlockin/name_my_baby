@@ -36,6 +36,8 @@ import { buildConstraints, isPremiumUser } from "./utils";
 export interface AgentTeamOptions {
   /** Gemini API key for accessing AI models */
   apiKey: string;
+  /** Optional custom runAgent function for testing (dependency injection) */
+  runAgentFn?: typeof runAgent;
 }
 
 /**
@@ -55,9 +57,11 @@ export interface AgentTeamOptions {
  */
 export class AgentTeam {
   private apiKey: string;
+  private runAgentFn: typeof runAgent;
 
   constructor(options: AgentTeamOptions) {
     this.apiKey = options.apiKey;
+    this.runAgentFn = options.runAgentFn || runAgent;
   }
 
   /**
@@ -118,7 +122,7 @@ export class AgentTeam {
    */
   private async runBaziAgent(input: UserInput): Promise<AgentOutput<BaziData>> {
     const context = this.formatInputContext(input);
-    return runAgent<BaziData>(BAZI_AGENT, { context }, this.apiKey);
+    return this.runAgentFn<BaziData>(BAZI_AGENT, { context }, this.apiKey);
   }
 
   /**
@@ -126,7 +130,7 @@ export class AgentTeam {
    */
   private async runHomophoneAgent(input: UserInput): Promise<AgentOutput<HomophoneData>> {
     const context = this.formatInputContext(input);
-    return runAgent<HomophoneData>(HOMOPHONE_AGENT, { context }, this.apiKey);
+    return this.runAgentFn<HomophoneData>(HOMOPHONE_AGENT, { context }, this.apiKey);
   }
 
   /**
@@ -134,7 +138,7 @@ export class AgentTeam {
    */
   private async runPoetryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<PoetryData>> {
     const context = this.formatInputContext(input);
-    return runAgent<PoetryData>(POETRY_AGENT, { context, constraints }, this.apiKey);
+    return this.runAgentFn<PoetryData>(POETRY_AGENT, { context, constraints }, this.apiKey);
   }
 
   /**
@@ -142,7 +146,7 @@ export class AgentTeam {
    */
   private async runHistoryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<HistoryData>> {
     const context = this.formatInputContext(input);
-    return runAgent<HistoryData>(HISTORY_AGENT, { context, constraints }, this.apiKey);
+    return this.runAgentFn<HistoryData>(HISTORY_AGENT, { context, constraints }, this.apiKey);
   }
 
   /**
@@ -150,7 +154,7 @@ export class AgentTeam {
    */
   private async runEnglishAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<EnglishData>> {
     const context = this.formatInputContext(input);
-    return runAgent<EnglishData>(ENGLISH_AGENT, { context, constraints }, this.apiKey);
+    return this.runAgentFn<EnglishData>(ENGLISH_AGENT, { context, constraints }, this.apiKey);
   }
 
   /**
@@ -191,7 +195,7 @@ export class AgentTeam {
       isPremium,
     });
 
-    const result = await runAgent<{ nameSchemes: NameScheme[] }>(
+    const result = await this.runAgentFn<{ nameSchemes: NameScheme[] }>(
       AGGREGATOR_AGENT,
       { context: aggregationContext },
       this.apiKey
