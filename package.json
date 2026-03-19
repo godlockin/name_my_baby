@@ -9,7 +9,7 @@
     "lint": "next lint",
     "pages:build": "npx @cloudflare/next-on-pages",
     "preview": "npx @cloudflare/next-on-pages && wrangler pages dev .vercel/output/static",
-    "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static",
+    "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static",
     "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./src/db/migrations/001_init.sql",
     "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./src/db/migrations/001_init.sql",
     "test": "vitest",
