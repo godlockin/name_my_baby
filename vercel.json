@@ -1,5 +1,4 @@
 {
-  "buildCommand": "npm run build && npm run pages:build",
   "devCommand": "npm run dev",
   "installCommand": "npm install"
 }

@@ -1,9 +1,11 @@
 [vars]
 ENVIRONMENT = "development"
 
+compatibility_flags = ["nodejs_compat"]
+compatibility_date = "2024-01-01"
+
 [dev]
-port = 3000
-local = true
+port = 3001
 
 # D1 Database
 [[d1_databases]]

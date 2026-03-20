@@ -15,6 +15,7 @@ import { cors } from "hono/cors";
 import { AgentTeam } from "../../src/lib/team";
 import { generateInviteCode, generateSessionId, validateInput } from "../../src/lib/utils";
 import { UserInput, InviteCodeRecord, UserSessionRecord, ApiError } from "../../src/types";
+import type { PagesFunctionHandler } from "@cloudflare/workers-types";
 
 /**
  * Environment bindings for Cloudflare Pages Functions
@@ -372,6 +373,15 @@ app.get("/job/:id", async (c) => {
       }, 400);
     }
 
+    // Debug: Check if DB binding is available
+    if (!c.env.DB) {
+      console.error("DB binding not available");
+      return c.json<ApiError>({
+        error: "Database not configured",
+        code: "DB_NOT_CONFIGURED"
+      }, 500);
+    }
+
     const result = await c.env.DB.prepare(
       "SELECT result_data, is_premium FROM user_sessions WHERE id = ?"
     )
@@ -422,9 +432,11 @@ app.get("/job/:id", async (c) => {
       isPremium: !!result.is_premium
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Job status error details:", errorMessage);
     logger.error({ requestId }, "Job status error", error);
     return c.json<ApiError>({
-      error: "Internal server error",
+      error: `Internal server error: ${errorMessage}`,
       code: "INTERNAL_ERROR"
     }, 500);
   }
@@ -784,5 +796,26 @@ async function verifyInviteCode(
   return { valid: true };
 }
 
-// Export handler for Cloudflare Pages
-export const onRequest = app.fetch;
+// Export handler for Cloudflare Pages Functions
+// Hono's app.fetch works directly with Request/Response
+export const onRequest: PagesFunctionHandler<Env> = async (context) => {
+  const url = new URL(context.request.url);
+
+  // Strip /api prefix for Hono routing
+  const path = url.pathname.replace(/^\/api/, '');
+  const newUrl = new URL(path + url.search, url.origin);
+
+  // Create a new request with the modified URL
+  const modifiedRequest = new Request(newUrl, {
+    method: context.request.method,
+    headers: context.request.headers,
+    body: context.request.body,
+    duplex: 'half',
+  });
+
+  // Pass env and execution context to Hono
+  return app.fetch(modifiedRequest, context.env, {
+    waitUntil: (promise: Promise<unknown>) => context.waitUntil(promise),
+    passThroughOnException: () => context.passThroughOnException(),
+  });
+};

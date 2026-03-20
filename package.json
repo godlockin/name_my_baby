@@ -3,15 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "npx wrangler pages dev out --port 3001",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "pages:build": "npx @cloudflare/next-on-pages",
-    "preview": "npx @cloudflare/next-on-pages && wrangler pages dev .vercel/output/static",
+    "preview": "npm run build && npx wrangler pages dev --port 3001",
     "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static",
     "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./src/db/migrations/001_init.sql",
-    "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./src/db/migrations/001_init.sql"
+    "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./src/db/migrations/001_init.sql",
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:ui": "npx playwright test --ui"
   },
   "dependencies": {
     "@google/generative-ai": "^0.11.4",
@@ -24,6 +27,7 @@
   "devDependencies": {
     "@cloudflare/next-on-pages": "^1.12.1",
     "@cloudflare/workers-types": "^4.20260317.1",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

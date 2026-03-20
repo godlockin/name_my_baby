@@ -3,20 +3,25 @@
 import { useWorkflowStore } from "../stores/workflow";
 import { useState, useEffect } from "react";
 import { generateName, getJobStatus } from "../lib/api";
+import { StepForm, GeneratingPage, ResultsList, ResultDetail } from "../components";
+import type { NameResult } from "../components/ResultsList";
 
 export default function Home() {
   const {
     fatherName, motherName, children, generationChar, stylePreference,
     specialRequests, phone, inviteCode,
-    setFatherName, setMotherName, updateChild, setGenerationChar,
-    setStylePreference, setSpecialRequests, setPhone, setInviteCode,
-    startGeneration, setSessionId, setGenerationStatus, setNames
+    startGeneration, setSessionId, setGenerationStatus, setNames,
+    generationStatus, names, savedNames, saveName, removeSavedName, reset
   } = useWorkflowStore();
 
   const [deviceId, setDeviceId] = useState("");
+  const [selectedName, setSelectedName] = useState<NameResult | null>(null);
+  
+  // Progress simulation states
+  const [progress, setProgress] = useState(0);
+  const [currentStage, setCurrentStage] = useState("analyze");
 
   useEffect(() => {
-    // Get or create device ID
     let id = localStorage.getItem("deviceId");
     if (!id) {
       id = `device-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -25,15 +30,33 @@ export default function Home() {
     setDeviceId(id);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const formatChildren = () => {
+    return children.map(child => ({
+      id: child.id,
+      name: child.name,
+      gender: child.gender,
+      birthTime: `${child.birthYear}-${String(child.birthMonth).padStart(2, "0")}-${String(child.birthDay).padStart(2, "0")}T${child.birthHour}:00`,
+    }));
+  };
+
+  const simulateProgress = () => {
+    setProgress(0);
+    setCurrentStage("analyze");
+    
+    setTimeout(() => { setProgress(30); setCurrentStage("generate"); }, 2000);
+    setTimeout(() => { setProgress(60); setCurrentStage("evaluate"); }, 4000);
+    setTimeout(() => { setProgress(85); setCurrentStage("finalize"); }, 6000);
+  };
+
+  const handleSubmit = async () => {
     startGeneration();
+    simulateProgress();
 
     try {
       const data = {
         fatherName,
         motherName,
-        children,
+        children: formatChildren(),
         generationChar,
         stylePreference,
         specialRequests,
@@ -46,7 +69,6 @@ export default function Home() {
 
       if (response.sessionId) {
         setSessionId(response.sessionId);
-        // Start polling for results
         pollResults(response.sessionId);
       }
     } catch (error) {
@@ -62,6 +84,7 @@ export default function Home() {
         const data = response;
 
         if (data.status === "completed" && data.names) {
+          setProgress(100);
           setNames(data.names);
           setGenerationStatus("completed");
         } else if (data.status === "processing") {
@@ -78,94 +101,66 @@ export default function Home() {
     setTimeout(poll, 2000);
   };
 
+  const handleToggleSave = (name: NameResult) => {
+    const isSaved = savedNames.some(n => n.id === name.id);
+    if (isSaved) {
+      removeSavedName(name.id);
+    } else {
+      saveName(name as any);
+    }
+  };
+
+  // Maps the store names to the ui names properly adding isSaved flag.
+  const mappedNames = names.map(n => ({
+    ...n,
+    isSaved: savedNames.some(sn => sn.id === n.id)
+  })) as NameResult[];
+
+  const mappedSavedNames = savedNames.map(n => ({
+    ...n,
+    isSaved: true
+  })) as NameResult[];
+
   return (
-    <main className="min-h-screen p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold text-center mb-8">AI 起名助手</h1>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="label">父亲姓名</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="请输入父亲姓名"
-              value={fatherName}
-              onChange={(e) => setFatherName(e.target.value)}
-            />
+    <main className="min-h-screen">
+      {/* View based on current generationStatus */}
+      {generationStatus === "idle" && (
+        <div className="py-12">
+          <div className="text-center mb-10">
+            <h1 className="text-4xl font-bold mb-3 font-serif" style={{ color: "var(--color-primary)" }}>AI 起名助手</h1>
+            <p className="text-gray-600">为宝宝挑选一个寓意深远、音韵优美的好名字</p>
           </div>
+          <StepForm onSubmit={handleSubmit} />
+        </div>
+      )}
 
-          <div>
-            <label className="label">母亲姓名</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="请输入母亲姓名"
-              value={motherName}
-              onChange={(e) => setMotherName(e.target.value)}
-            />
-          </div>
+      {generationStatus === "processing" && (
+        <GeneratingPage status="processing" progress={progress} currentStage={currentStage} />
+      )}
 
-          <div>
-            <label className="label">字辈要求（可选）</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="如家族有字辈要求请填写"
-              value={generationChar}
-              onChange={(e) => setGenerationChar(e.target.value)}
-            />
-          </div>
+      {generationStatus === "failed" && (
+        <GeneratingPage status="failed" />
+      )}
 
-          <div>
-            <label className="label">风格偏好（可选）</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="如：文雅、大气、古典等"
-              value={stylePreference}
-              onChange={(e) => setStylePreference(e.target.value)}
-            />
-          </div>
+      {generationStatus === "completed" && (
+        <ResultsList
+          names={mappedNames}
+          savedNames={mappedSavedNames}
+          onSelectName={setSelectedName}
+          onToggleSave={handleToggleSave}
+          onBack={reset}
+          onRegenerate={handleSubmit}
+        />
+      )}
 
-          <div>
-            <label className="label">特殊要求（可选）</label>
-            <textarea
-              className="input"
-              placeholder="其他特殊要求或说明"
-              value={specialRequests}
-              onChange={(e) => setSpecialRequests(e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div>
-            <label className="label">手机号（可选）</label>
-            <input
-              type="tel"
-              className="input"
-              placeholder="用于接收通知和找回结果"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="label">邀请码（可选）</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="如有邀请码请填写，解锁完整权益"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
-            />
-          </div>
-
-          <button type="submit" className="btn-primary w-full">
-            开始起名
-          </button>
-        </form>
-      </div>
+      {/* Result Detail Overlay */}
+      {selectedName && (
+        <ResultDetail
+          name={selectedName}
+          onClose={() => setSelectedName(null)}
+          onToggleSave={() => handleToggleSave(selectedName)}
+        />
+      )}
     </main>
   );
 }

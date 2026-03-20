@@ -10,8 +10,14 @@ module.exports = {
       colors: {
         primary: '#C44536',
         bg: '#F8F4E8',
+        ink: '#2C2C2C',
         text: '#2C2C2C',
+        gold: '#D4AF37',
         accent: '#D4AF37',
+      },
+      fontFamily: {
+        sans: ['var(--font-sans)', 'sans-serif'],
+        serif: ['var(--font-serif)', 'serif'],
       },
     },
   },

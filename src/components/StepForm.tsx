@@ -54,11 +54,15 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
 
     if (currentStep === "children") {
       children.forEach((child, index) => {
-        if (!child.birthTime || child.birthTime.trim() === "") {
-          newErrors.push({ field: `child-${index}-birthTime`, message: "请填写出生时间" });
-        }
+        // Name is now optional, removed validation
         if (!child.gender) {
           newErrors.push({ field: `child-${index}-gender`, message: "请选择性别" });
+        }
+        if (!child.birthYear || !child.birthMonth || !child.birthDay) {
+          newErrors.push({ field: `child-${index}-birth`, message: "请选择出生日期" });
+        }
+        if (!child.birthHour) {
+          newErrors.push({ field: `child-${index}-birthHour`, message: "请选择出生时辰" });
         }
       });
     }
@@ -205,7 +209,12 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
                 style={{ borderColor: "rgba(196, 69, 54, 0.2)" }}
               >
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium">孩子 {index + 1}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium">孩子 {index + 1}</h3>
+                    {child.name && (
+                      <span className="text-sm text-gray-500">（参考：{child.name}）</span>
+                    )}
+                  </div>
                   {children.length > 1 && (
                     <button
                       type="button"
@@ -217,34 +226,96 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div>
+                    <label className="label">姓名（可选，仅供参考）</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="如家族有字辈要求可先填写，最终起名可参考"
+                      value={child.name}
+                      onChange={(e) => updateChild(child.id, { name: e.target.value })}
+                    />
+                  </div>
+
                   <div>
                     <label className="label label-required">性别</label>
-                    <select
-                      className="input"
-                      value={child.gender}
-                      onChange={(e) =>
-                        updateChild(child.id, { gender: e.target.value as "male" | "female" })
-                      }
-                    >
-                      <option value="male">男孩</option>
-                      <option value="female">女孩</option>
-                    </select>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`gender-${child.id}`}
+                          checked={child.gender === "male"}
+                          onChange={() => updateChild(child.id, { gender: "male" })}
+                          className="radio"
+                        />
+                        男
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`gender-${child.id}`}
+                          checked={child.gender === "female"}
+                          onChange={() => updateChild(child.id, { gender: "female" })}
+                          className="radio"
+                        />
+                        女
+                      </label>
+                    </div>
                   </div>
 
                   <div>
                     <label className="label label-required">出生时间</label>
-                    <input
-                      type="datetime-local"
-                      className={`input ${getError(`child-${index}-birthTime`) ? "input-error" : ""}`}
-                      value={child.birthTime}
-                      onChange={(e) =>
-                        updateChild(child.id, { birthTime: e.target.value })
-                      }
-                    />
-                    {getError(`child-${index}-birthTime`) && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {/* Year */}
+                      <select
+                        className={`input w-full ${getError(`child-${index}-birth`) ? "input-error" : ""}`}
+                        value={child.birthYear}
+                        onChange={(e) => updateChild(child.id, { birthYear: parseInt(e.target.value) })}
+                      >
+                        {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                          <option key={year} value={year}>{year}年</option>
+                        ))}
+                      </select>
+
+                      {/* Month */}
+                      <select
+                        className={`input w-full ${getError(`child-${index}-birth`) ? "input-error" : ""}`}
+                        value={child.birthMonth}
+                        onChange={(e) => updateChild(child.id, { birthMonth: parseInt(e.target.value) })}
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                          <option key={month} value={month}>{month}月</option>
+                        ))}
+                      </select>
+
+                      {/* Day */}
+                      <select
+                        className={`input w-full ${getError(`child-${index}-birth`) ? "input-error" : ""}`}
+                        value={child.birthDay}
+                        onChange={(e) => updateChild(child.id, { birthDay: parseInt(e.target.value) })}
+                      >
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                          <option key={day} value={day}>{day}日</option>
+                        ))}
+                      </select>
+
+                      {/* Hour */}
+                      <select
+                        className={`input w-full ${getError(`child-${index}-birthHour`) ? "input-error" : ""}`}
+                        value={child.birthHour}
+                        onChange={(e) => updateChild(child.id, { birthHour: e.target.value })}
+                      >
+                        {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
+                          <option key={hour} value={hour.toString().padStart(2, "0")}>
+                            {hour.toString().padStart(2, "0")}时
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {(getError(`child-${index}-birth`) || getError(`child-${index}-birthHour`)) && (
                       <p className="text-sm text-[var(--color-error)] mt-1">
-                        {getError(`child-${index}-birthTime`)}
+                        {getError(`child-${index}-birth`) || getError(`child-${index}-birthHour`)}
                       </p>
                     )}
                   </div>

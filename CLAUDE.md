@@ -160,17 +160,29 @@ Each agent must output:
 # Install dependencies
 npm install
 
-# Start Next.js dev server (frontend)
+# Build static frontend
+npm run build
+
+# Start local development server (Cloudflare Pages + Functions)
 npm run dev
 
-# Build for production (verifies both Next.js and Functions)
-npm run build
+# Preview production build locally
+npm run preview
 
 # Type check Functions only
 npm run check:functions
 
 # Type check Next.js only
 npm run check:next
+
+# Run E2E tests with Playwright
+npm test
+
+# Run E2E tests in headed mode (see browser)
+npm run test:headed
+
+# Run E2E tests with UI
+npm run test:ui
 ```
 
 ### Local Development Setup
@@ -183,13 +195,84 @@ cp .env.example .env
 # 2. Initialize local D1 database
 npm run db:migrate
 
-# 3. Start development server
+# 3. Build frontend and start development server
+npm run build
 npm run dev
 ```
 
-Access the app at: http://localhost:3000
+Access the app at: http://localhost:3001
+
+### Architecture
+
+- **Frontend**: Next.js 15 static export (`output: "export"`) to `out/` directory
+- **API**: Cloudflare Pages Functions in `functions/` directory
+- **Development**: `wrangler pages dev out` serves both static assets and Functions
+
+### ChildInfo Data Structure
+
+Children information is stored with separate year, month, day, and hour fields for feng shui calculations:
+
+```typescript
+interface ChildInfo {
+  id: string;
+  name: string;         // Child's name (optional, for reference only)
+  gender: "male" | "female";
+  birthYear: number;    // YYYY format, e.g., 2024
+  birthMonth: number;   // MM format (1-12)
+  birthDay: number;     // DD format (1-31)
+  birthHour: string;    // HH format (00-23)
+}
+```
+
+The form combines `birthYear`, `birthMonth`, `birthDay`, and `birthHour` into ISO datetime string when submitting to API:
+```typescript
+birthTime: `${child.birthYear}-${String(child.birthMonth).padStart(2, '0')}-${String(child.birthDay).padStart(2, '0')}T${child.birthHour}:00`
+```
+
+**Default values:** New child entries are initialized with current date and time (year, month, day, hour from `new Date()`).
+
+**Name field:** Changed from required to optional - serves as reference only, parents can leave it empty if they want the AI to suggest names without prior input.
 
 ### TypeScript Configuration
 
 - `tsconfig.json` - Next.js app (excludes `functions/`)
 - `functions/tsconfig.json` - Cloudflare Pages Functions (includes `@cloudflare/workers-types`)
+
+---
+
+## Testing
+
+### E2E Tests (Playwright)
+
+Located in `tests/e2e/`. Tests cover:
+
+1. **Complete flow test** - Full user journey from form fill to API submission
+2. **Validation test** - Required field validation
+3. **Children management test** - Add/remove children (1-4 limit)
+4. **API data format test** - Verifies children data is formatted correctly
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test file
+npx playwright test tests/e2e/regression.test.ts
+
+# Run with browser visible
+npm run test:headed
+```
+
+### Test Data Format
+
+Children birth time is formatted as `YYYY-MM-DDTHH:mm` for the API:
+
+```typescript
+// Input (store format)
+birthYear: 2024
+birthMonth: 1
+birthDay: 15
+birthHour: '14'
+
+// Output (API format)
+birthTime: '2024-01-15T14:00'
+```
