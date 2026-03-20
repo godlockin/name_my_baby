@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import { useWorkflowStore } from "../stores/workflow";
+import type { NameScheme } from "../types";
 
 export interface NameResult {
   id: string;
@@ -18,38 +20,83 @@ export interface NameResult {
 }
 
 interface ResultsListProps {
-  names?: NameResult[];
-  savedNames?: NameResult[];
-  onSelectName?: (name: NameResult) => void;
-  onToggleSave?: (name: NameResult) => void;
   onBack?: () => void;
   onRegenerate?: () => void;
 }
 
+// Convert NameScheme to NameResult
+const convertToNameResult = (scheme: NameScheme): NameResult => {
+  // Extract five elements from bazi analysis
+  const wuxing: string[] = [];
+  if (scheme.baziAnalysis) {
+    const match = scheme.baziAnalysis.match(/五行 [:：]\s*([金木水火土，]+)/);
+    if (match) {
+      wuxing.push(...match[1].split(/[,,]/).filter(Boolean));
+    }
+  }
+
+  // Derive scores from available data
+  const culturalScore = scheme.poetryReference ? 90 : 70;
+  const phoneticScore = scheme.homophoneCheck.overall === "safe" ? 95 : 70;
+  const meaningScore = scheme.poetryReference ? 85 : 75;
+  const overallScore = Math.round((culturalScore + phoneticScore + meaningScore) / 3);
+
+  return {
+    id: scheme.id,
+    name: scheme.chineseName,
+    pinyin: "",
+    gender: "unisex",
+    score: overallScore,
+    meaning: scheme.coreMeaning,
+    wuxing: wuxing.length > 0 ? wuxing : ["金", "木", "水"],
+    bazi: scheme.baziAnalysis,
+    culturalScore,
+    phoneticScore,
+    meaningScore,
+    isSaved: false,
+  };
+};
+
 export const ResultsList: React.FC<ResultsListProps> = ({
-  names = [],
-  savedNames = [],
-  onSelectName,
-  onToggleSave,
   onBack,
   onRegenerate,
 }) => {
+  const { names, savedNames, saveName, removeSavedName } = useWorkflowStore();
   const [filter, setFilter] = React.useState<"all" | "saved">("all");
   const [sortBy, setSortBy] = React.useState<"score" | "cultural" | "phonetic">("score");
 
-  const displayedNames = filter === "saved" ? savedNames : names;
+  // Convert NameScheme to NameResult for display
+  const displayedNames: NameResult[] = React.useMemo(() => {
+    const source = filter === "saved" ? savedNames : names;
+    return source.map(convertToNameResult);
+  }, [names, savedNames, filter]);
 
-  const sortedNames = [...displayedNames].sort((a, b) => {
-    switch (sortBy) {
-      case "cultural":
-        return b.culturalScore - a.culturalScore;
-      case "phonetic":
-        return b.phoneticScore - a.phoneticScore;
-      case "score":
-      default:
-        return b.score - a.score;
+  const sortedNames = React.useMemo(() => {
+    return [...displayedNames].sort((a, b) => {
+      switch (sortBy) {
+        case "cultural":
+          return b.culturalScore - a.culturalScore;
+        case "phonetic":
+          return b.phoneticScore - a.phoneticScore;
+        case "score":
+        default:
+          return b.score - a.score;
+      }
+    });
+  }, [displayedNames, sortBy]);
+
+  const handleToggleSave = (name: NameResult) => {
+    const isSaved = savedNames.find((n) => n.id === name.id);
+    if (isSaved) {
+      removeSavedName(name.id);
+    } else {
+      // Find original scheme from names
+      const originalScheme = names.find((n) => n.id === name.id);
+      if (originalScheme) {
+        saveName(originalScheme);
+      }
     }
-  });
+  };
 
   const getScoreBadge = (score: number) => {
     if (score >= 90) return "badge-high";
@@ -68,7 +115,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2" style={{ color: "var(--color-text)" }}>
+          <h1 className="text-3xl font-bold mb-2 text-[var(--color-text)]">
             起名结果
           </h1>
           <p className="text-gray-600">
@@ -122,11 +169,11 @@ export const ResultsList: React.FC<ResultsListProps> = ({
               <div
                 key={name.id}
                 className="card name-card cursor-pointer"
-                onClick={() => onSelectName?.(name)}
+                onClick={() => {}}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="text-2xl font-bold" style={{ color: "var(--color-text)" }}>
+                    <h3 className="text-2xl font-bold text-[var(--color-text)]">
                       {name.name}
                     </h3>
                     <p className="text-sm text-gray-500">{name.pinyin}</p>
@@ -138,11 +185,11 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onToggleSave?.(name);
+                        handleToggleSave(name);
                       }}
                       className="p-1 hover:bg-gray-100 rounded"
                     >
-                      {name.isSaved ? (
+                      {savedNames.find((n) => n.id === name.id) ? (
                         <svg className="w-5 h-5 text-[var(--color-primary)]" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M5 4a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 20V4z" />
                         </svg>

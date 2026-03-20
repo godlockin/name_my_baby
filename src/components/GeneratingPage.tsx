@@ -1,13 +1,7 @@
 "use client";
 
 import React from "react";
-
-interface GeneratingPageProps {
-  status?: "processing" | "completed" | "failed";
-  progress?: number;
-  currentStage?: string;
-  stages?: StageInfo[];
-}
+import { useWorkflowStore } from "../stores/workflow";
 
 interface StageInfo {
   key: string;
@@ -16,34 +10,79 @@ interface StageInfo {
   icon: React.ReactNode;
 }
 
-export const GeneratingPage: React.FC<GeneratingPageProps> = ({
-  status = "processing",
-  progress = 0,
-  currentStage = "",
-  stages = defaultStages,
-}) => {
+interface GeneratingPageProps {
+  onRetry?: () => void;
+}
+
+export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry }) => {
+  const { generationStatus } = useWorkflowStore();
+  const [progress, setProgress] = React.useState(0);
+  const [currentStage, setCurrentStage] = React.useState("analyze");
+  const [estimatedTime, setEstimatedTime] = React.useState(30); // 30 seconds default
+
+  // Simulate progress based on status
+  React.useEffect(() => {
+    if (generationStatus !== "processing") return;
+
+    const stages = ["analyze", "generate", "evaluate", "finalize"];
+    const TOTAL_DURATION = 30000; // 30 seconds total
+    const STAGE_DURATION = TOTAL_DURATION / stages.length;
+    const PROGRESS_TICK = 100; // Update every 100ms
+
+    const startTime = Date.now();
+    let lastStageIndex = 0;
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const stageIndex = Math.min(
+        Math.floor(elapsed / STAGE_DURATION),
+        stages.length - 1
+      );
+
+      // Update stage
+      if (stageIndex !== lastStageIndex) {
+        setCurrentStage(stages[stageIndex]);
+        lastStageIndex = stageIndex;
+      }
+
+      // Update progress
+      const targetProgress = ((stageIndex + 1) / stages.length) * 100;
+      setProgress((prev) => {
+        if (prev >= targetProgress) return prev;
+        return Math.min(prev + 1, targetProgress);
+      });
+
+      // Update estimated remaining time
+      const remaining = Math.max(0, Math.ceil((TOTAL_DURATION - elapsed) / 1000));
+      setEstimatedTime(remaining);
+    }, PROGRESS_TICK);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [generationStatus]); // Only depend on generationStatus
+
   const getStageStatus = (stageKey: string) => {
+    const stages = defaultStages;
     const currentIndex = stages.findIndex((s) => s.key === currentStage);
     const stageIndex = stages.findIndex((s) => s.key === stageKey);
 
-    if (status === "failed") return "error";
-    if (status === "completed") return "completed";
+    if (generationStatus === "failed") return "error";
+    if (generationStatus === "completed") return "completed";
     if (stageIndex < currentIndex) return "completed";
     if (stageIndex === currentIndex) return "active";
     return "pending";
   };
 
-  if (status === "failed") {
+  if (generationStatus === "failed") {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
         <div className="card-chinese text-center max-w-md w-full">
           <div
-            className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+            className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center bg-[rgba(239,68,68,0.1)]"
           >
             <svg
-              className="w-8 h-8"
-              style={{ color: "var(--color-error)" }}
+              className="w-8 h-8 text-[var(--color-error)]"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -60,7 +99,7 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({
           <p className="text-gray-600 mb-6">
             抱歉，起名过程中遇到了问题，请稍后重试
           </p>
-          <button className="btn-primary w-full">重新尝试</button>
+          <button className="btn-primary w-full" onClick={onRetry}>重新尝试</button>
         </div>
       </div>
     );
@@ -96,10 +135,7 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({
               </svg>
             </div>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span
-                className="text-2xl font-bold"
-                style={{ color: "var(--color-primary)" }}
-              >
+              <span className="text-2xl font-bold text-[var(--color-primary)]">
                 起
               </span>
             </div>
@@ -114,10 +150,7 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({
         <div className="mb-8">
           <div className="flex justify-between text-sm mb-2">
             <span className="text-gray-600">生成进度</span>
-            <span
-              className="font-medium"
-              style={{ color: "var(--color-primary)" }}
-            >
+            <span className="font-medium text-[var(--color-primary)]">
               {progress}%
             </span>
           </div>
@@ -127,11 +160,15 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({
               style={{ width: `${progress}%` }}
             />
           </div>
+          <div className="flex justify-between text-xs mt-2 text-gray-500">
+            <span>预计还需 {estimatedTime} 秒</span>
+            <span>请耐心等候...</span>
+          </div>
         </div>
 
         {/* Stages */}
         <div className="space-y-4">
-          {stages.map((stage) => {
+          {defaultStages.map((stage) => {
             const stageStatus = getStageStatus(stage.key);
             return (
               <div
@@ -181,12 +218,9 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({
         </div>
 
         {/* Loading Tips */}
-        <div
-          className="mt-8 p-4 rounded-lg text-center"
-          style={{ backgroundColor: "rgba(212, 175, 55, 0.1)" }}
-        >
-          <p className="text-sm" style={{ color: "var(--color-text)" }}>
-            <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>小知识：</span>
+        <div className="mt-8 p-4 rounded-lg text-center bg-[rgba(212,175,55,0.1)]">
+          <p className="text-sm text-[var(--color-text)]">
+            <span className="text-[var(--color-primary)] font-semibold">小知识：</span>
             传统起名需考虑八字五行、音韵平仄、字形寓意等多个维度
           </p>
         </div>

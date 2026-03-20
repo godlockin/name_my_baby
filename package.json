@@ -8,13 +8,17 @@
     "start": "next start",
     "lint": "next lint",
     "pages:build": "npx @cloudflare/next-on-pages",
-    "preview": "npm run build && npx wrangler pages dev --port 3001",
-    "deploy": "npm run pages:build && wrangler pages deploy .vercel/output/static",
+    "preview": "npx @cloudflare/next-on-pages && wrangler pages dev .vercel/output/static",
+    "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static",
     "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./src/db/migrations/001_init.sql",
     "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./src/db/migrations/001_init.sql",
-    "test": "npx playwright test",
-    "test:headed": "npx playwright test --headed",
-    "test:ui": "npx playwright test --ui"
+    "test:e2e": "npx playwright test",
+    "test:e2e:headed": "npx playwright test --headed",
+    "test:e2e:ui": "npx playwright test --ui",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@google/generative-ai": "^0.11.4",
@@ -28,13 +32,20 @@
     "@cloudflare/next-on-pages": "^1.12.1",
     "@cloudflare/workers-types": "^4.20260317.1",
     "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.4.5",
+    "@testing-library/react": "^15.0.7",
+    "@testing-library/user-event": "^14.5.2",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^1.6.0",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^24.0.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.4.5",
-    "wrangler": "^3.63.1"
+    "vitest": "^1.6.0",
+    "wrangler": "^4.75.0"
   }
 }

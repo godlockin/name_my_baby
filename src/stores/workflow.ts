@@ -1,15 +1,5 @@
 import { create } from "zustand";
-import type { NameScheme } from "../types";
-
-interface ChildInfo {
-  id: string;
-  name: string; // Child's name (surname is inherited from father) - optional, for reference only
-  gender: "male" | "female";
-  birthYear: number; // YYYY format, e.g., 2024
-  birthMonth: number; // MM format (1-12)
-  birthDay: number; // DD format (1-31)
-  birthHour: string; // HH format (00-23)
-}
+import type { NameScheme, ChildInfo } from "../types";
 
 interface WorkflowState {
   // Form data

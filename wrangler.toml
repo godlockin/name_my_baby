@@ -1,3 +1,6 @@
+name = "name-my-baby"
+pages_build_output_dir = ".vercel/output/static"
+
 [vars]
 ENVIRONMENT = "development"
 
@@ -11,7 +14,7 @@ port = 3001
 [[d1_databases]]
 binding = "DB"
 database_name = "name-my-baby-db"
-database_id = "local-dev-db-id"
+database_id = "0133574c-930a-4c62-92d3-9b7d58c6cb47"
 
 # R2 Bucket
 [[r2_buckets]]

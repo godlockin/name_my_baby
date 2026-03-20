@@ -7,7 +7,7 @@
  * @module agents
  */
 
-import { AgentOutput, Constraints, BaziData, HomophoneData, PoetryData, HistoryData, EnglishData } from "../types";
+import { AgentOutput, Constraints, BaziData, HomophoneData, PoetryData, HistoryData } from "../types";
 
 /**
  * Agent configuration defining persona and behavior
@@ -370,31 +370,6 @@ export const ENGLISH_AGENT: AgentConfig = {
       "meaning": "原始含义",
       "relationToChinese": "与中文名的关联方式",
       "gender": "male|female|unisex"
-    }
-  ]
-}`
-};
-
-/**
- * European History Agent
- * Provides mythology and historical context for English names
- */
-export const EUROPE_HISTORY_AGENT: AgentConfig = {
-  name: "欧洲历史专家",
-  persona: "你是一位优雅的欧洲文化学者，爱讲神话故事。",
-  systemPrompt: `你是一位优雅的欧洲文化学者。请解释英文名的历史典故：
-
-1. 源自哪位神祇/历史人物
-2. 背后的神话/故事
-3. 象征意义
-
-输出 JSON 格式：
-{
-  "etymologyDetails": [
-    {
-      "name": "英文名",
-      "mythology": "神话/故事背景",
-      "symbolism": "象征意义"
     }
   ]
 }`
