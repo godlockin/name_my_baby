@@ -38,6 +38,8 @@ export interface AgentTeamOptions {
   apiKey: string;
   /** Optional custom runAgent function for testing (dependency injection) */
   runAgentFn?: typeof runAgent;
+  /** Optional flag to run in degraded mode (poetry agent only) */
+  degradedMode?: boolean;
 }
 
 /**
@@ -58,10 +60,12 @@ export interface AgentTeamOptions {
 export class AgentTeam {
   private apiKey: string;
   private runAgentFn: typeof runAgent;
+  private degradedMode: boolean;
 
   constructor(options: AgentTeamOptions) {
     this.apiKey = options.apiKey;
     this.runAgentFn = options.runAgentFn || runAgent;
+    this.degradedMode = options.degradedMode || false;
   }
 
   /**
@@ -74,6 +78,11 @@ export class AgentTeam {
   async generate(context: SharedContext): Promise<NameScheme[]> {
     const { userInput } = context;
 
+    // If in degraded mode, only run poetry agent and generate simplified results
+    if (this.degradedMode) {
+      return this.generateDegradedMode(context, userInput);
+    }
+
     // Update session status at start
     await this.updateSessionStatus(context.sessionId, "processing", "开始分析：八字分析师和谐音梗专家正在并行工作...");
 
@@ -84,6 +93,13 @@ export class AgentTeam {
       this.runHomophoneAgent(userInput),
     ]);
 
+    // Handle partial failures - continue with available results
+    if (baziResult.status === "failed" && homophoneResult.status === "failed") {
+      console.warn("Both foundation agents failed, returning degraded results");
+      // Return minimal results instead of complete failure
+      return this.generateFullDegradedResults(context, userInput);
+    }
+
     context.round1 = {
       baziAnalysis: baziResult,
       homophoneCheck: homophoneResult,
@@ -91,17 +107,28 @@ export class AgentTeam {
 
     await this.updateSessionStatus(context.sessionId, "processing", "八字分析完成，正在进行古诗词/历史/英文专家分析...");
 
-    // Build constraints for Round 2
+    // Build constraints for Round 2 (only if agents succeeded)
     const constraints = buildConstraints(baziResult, homophoneResult);
 
-    // Round 2: Parallel creative analysis (Poetry + History + English) - ALL users get English names
+    // Round 2: Parallel creative analysis (Poetry + History + English)
     console.log("Round 2: Running parallel creative analysis...");
 
     const [poetryResult, historyResult, englishResult] = await Promise.all([
       this.runPoetryAgent(userInput, constraints),
       this.runHistoryAgent(userInput, constraints),
-      this.runEnglishAgent(userInput, constraints), // All users get English names
+      this.runEnglishAgent(userInput, constraints),
     ]);
+
+    // Handle partial failures in Round 2 - continue with available results
+    const hasAnyCreativeResult =
+      poetryResult.status === "success" ||
+      historyResult.status === "success" ||
+      englishResult.status === "success";
+
+    if (!hasAnyCreativeResult) {
+      console.warn("All creative agents failed, returning degraded results");
+      return this.generateFullDegradedResults(context, userInput);
+    }
 
     context.round2 = {
       poetry: poetryResult,
@@ -122,6 +149,91 @@ export class AgentTeam {
     await this.updateSessionStatus(context.sessionId, "completed", "生成完成！");
 
     return finalNames;
+  }
+
+  /**
+   * Degraded mode: only run poetry agent and generate simplified results
+   * This is used when invite code is invalid but we still want to provide service
+   */
+  private async generateDegradedMode(context: SharedContext, userInput: UserInput): Promise<NameScheme[]> {
+    console.log("[DegradedMode] Running poetry agent only...");
+
+    await this.updateSessionStatus(context.sessionId, "processing", "古诗词专家正在分析...");
+
+    // Only run poetry agent
+    const poetryResult = await this.runPoetryAgent(userInput, { mustHave: [], avoid: [] });
+
+    if (poetryResult.status !== "success") {
+      console.warn("[DegradedMode] Poetry agent failed, returning minimal results");
+      return this.generateFullDegradedResults(context, userInput);
+    }
+
+    context.round2 = {
+      poetry: poetryResult,
+      history: { status: "failed", data: { candidateChars: [] }, notes: "未启用" },
+      english: { status: "failed", data: { candidateNames: [] }, notes: "未启用" },
+    };
+
+    await this.updateSessionStatus(context.sessionId, "processing", "正在生成名字方案...");
+
+    // Generate simplified aggregation
+    const finalNames = await this.aggregateDegradedResults(context);
+
+    context.round3 = {
+      finalNames,
+    };
+
+    await this.updateSessionStatus(context.sessionId, "completed", "生成完成（简化版）");
+
+    return finalNames;
+  }
+
+  /**
+   * Generates full degraded results when all agents fail
+   * This ensures users get something instead of complete failure
+   */
+  private async generateFullDegradedResults(context: SharedContext, userInput: UserInput): Promise<NameScheme[]> {
+    console.log("[DegradedMode] Generating minimal results...");
+
+    // Create minimal name schemes based on user input only
+    const surname = userInput.surnameChoice === "mother" ? userInput.motherName.charAt(0) : userInput.fatherName.charAt(0);
+    const childGender = userInput.children[0]?.gender || "male";
+
+    // Simple fallback names (this is a last resort)
+    const fallbackNames: NameScheme[] = [
+      {
+        id: `fallback-1-${context.sessionId}`,
+        chineseName: surname + (childGender === "male" ? "文" : "雅"),
+        englishName: childGender === "male" ? "Alex" : "Anna",
+        coreMeaning: "基于基本信息生成的名字",
+        baziAnalysis: "八字分析暂缺",
+        homophoneCheck: {
+          mandarin: "safe",
+          dialects: [],
+          english: "safe",
+          overall: "safe"
+        },
+        isPremium: false
+      },
+      {
+        id: `fallback-2-${context.sessionId}`,
+        chineseName: surname + (childGender === "male" ? "俊" : "美"),
+        englishName: childGender === "male" ? "Ben" : "Bella",
+        coreMeaning: "基于基本信息生成的名字",
+        baziAnalysis: "八字分析暂缺",
+        homophoneCheck: {
+          mandarin: "safe",
+          dialects: [],
+          english: "safe",
+          overall: "safe"
+        },
+        isPremium: false
+      }
+    ];
+
+    await this.updateSessionStatus(context.sessionId, "completed", "生成完成（简化版）");
+
+    return fallbackNames;
   }
 
   /**
@@ -230,6 +342,48 @@ export class AgentTeam {
         // Keep englishName for all users now
       }));
     }
+
+    return schemes;
+  }
+
+  /**
+   * Aggregates results in degraded mode (poetry agent only)
+   * Uses a simplified prompt to generate names based on poetry candidates
+   */
+  private async aggregateDegradedResults(context: SharedContext): Promise<NameScheme[]> {
+    const { userInput, round2 } = context;
+
+    const poetryData = round2?.poetry?.data as PoetryData | undefined;
+    const candidateChars = poetryData?.candidateChars || [];
+
+    if (candidateChars.length === 0) {
+      return this.generateFullDegradedResults(context, userInput);
+    }
+
+    // Build simplified aggregation context for degraded mode
+    const aggregationContext = JSON.stringify({
+      userInput,
+      poetry: round2?.poetry,
+      degradedMode: true,
+    });
+
+    const result = await this.runAgentFn<{ nameSchemes: NameScheme[] }>(
+      AGGREGATOR_AGENT,
+      { context: aggregationContext },
+      this.apiKey
+    );
+
+    if (result.status !== "success") {
+      return this.generateFullDegradedResults(context, userInput);
+    }
+
+    let schemes = result.data.nameSchemes || [];
+
+    // Limit to 2 schemes for degraded mode
+    schemes = schemes.slice(0, 2).map((scheme) => ({
+      ...scheme,
+      isPremium: false,
+    }));
 
     return schemes;
   }

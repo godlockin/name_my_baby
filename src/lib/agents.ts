@@ -100,8 +100,8 @@ export async function runAgent<T>(
         },
       ],
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 32768,
+        temperature: 0.5, // Lower temperature for faster, more deterministic responses
+        maxOutputTokens: 16384, // Reduced from 32768 for faster responses
         responseMimeType: "application/json",
       },
     });
@@ -114,8 +114,8 @@ export async function runAgent<T>(
           "Content-Type": "application/json",
         },
         body: requestBody,
-        // Add signal for timeout handling
-        signal: AbortSignal.timeout(60000), // 60 second timeout
+        // Add signal for timeout handling - 45 second timeout per agent
+        signal: AbortSignal.timeout(45000),
       }
     );
 
@@ -263,13 +263,13 @@ export const BAZI_AGENT: AgentConfig = {
 注意：
 - 这是软性建议，不是硬性约束
 - 用"建议"、"宜"、"忌"等词语
-- 输出 JSON 格式：
+- 输出 JSON 格式（不要多余解释）：
   {
     "eightChars": "八字排盘结果",
     "fiveElements": "五行分布",
-    "weakElements": ["弱五行 1", "弱五行 2"],
+    "weakElements": ["弱五行 1"],
     "strongElements": ["强五行 1"],
-    "recommendedRadicals": ["建议的偏旁 1", "建议的偏旁 2"],
+    "recommendedRadicals": ["建议的偏旁 1"],
     "avoidRadicals": ["忌讳的偏旁 1"],
     "summary": "一句话总结"
   }`
@@ -294,9 +294,9 @@ export const HOMOPHONE_AGENT: AgentConfig = {
 - medium: 中等风险（需注意）
 - high: 高风险（建议避免）
 
-输出 JSON 格式：
+输出 JSON 格式（简洁为主）：
 {
-  "forbiddenChars": ["忌讳字 1", "忌讳字 2"],
+  "forbiddenChars": ["忌讳字 1"],
   "riskCombinations": ["问题组合 1"],
   "riskLevel": "low|medium|high",
   "summary": "一句话总结"
@@ -321,7 +321,7 @@ export const POETRY_AGENT: AgentConfig = {
 - 类似意境：化用意境，非直接引用（黄色标记）
 - 美好寓意：纯粹寓意解释，无出处（灰色标记）
 
-输出 JSON 格式：
+输出 JSON 格式（简洁，3-5 个字即可）：
 {
   "candidateChars": [
     {
@@ -330,11 +330,10 @@ export const POETRY_AGENT: AgentConfig = {
       "level": "确凿出处",
       "original": "原句",
       "meaning": "寓意",
-      "radicals": ["偏旁"],
-      "gender": "male"
+      "radicals": ["偏旁"]
     }
   ],
-  "notes": "古诗词专家的简短评语"
+  "notes": "古诗词专家的简短评语 (20 字内)"
 }`
 };
 
@@ -351,7 +350,7 @@ export const HISTORY_AGENT: AgentConfig = {
 2. 历史事件关联
 3. 文化寓意
 
-输出 JSON 格式：
+输出 JSON 格式（简洁，3-5 个字即可）：
 {
   "candidateChars": [
     {
@@ -361,7 +360,7 @@ export const HISTORY_AGENT: AgentConfig = {
       "historicalNote": "历史典故说明"
     }
   ],
-  "notes": "历史学家的简短评语"
+  "notes": "历史学家的简短评语 (20 字内)"
 }`
 };
 
@@ -378,7 +377,7 @@ export const ENGLISH_AGENT: AgentConfig = {
 - 寓意关联（优先）：如「晓明」（光明）→「Lucy」（光明）
 - 音译关联（辅助）：如「晓明」→「Shawn」
 
-输出 JSON 格式：
+输出 JSON 格式（简洁，2-3 个英文名即可）：
 {
   "candidateNames": [
     {
@@ -389,7 +388,7 @@ export const ENGLISH_AGENT: AgentConfig = {
       "gender": "male"
     }
   ],
-  "notes": "英文专家的简短评语"
+  "notes": "英文专家的简短评语 (20 字内)"
 }`
 };
 
@@ -408,6 +407,7 @@ export const AGGREGATOR_AGENT: AgentConfig = {
    - 男性名字：优先出自四书五经（论语、孟子、大学、中庸、诗经、尚书、礼记、周易、春秋）
    - 女性名字：优先出自诗经（不必须，可灵活选择）
 3. 每个方案必须包含 agentNotes 字段，用于在「专家组综合考量」中展示
+4. 简洁为主：生成 4-6 个方案即可
 
 输出 JSON 格式：
 {
@@ -447,6 +447,6 @@ export const AGGREGATOR_AGENT: AgentConfig = {
       "isPremium": false
     }
   ],
-  "summary": "汇总员的总结评语"
+  "summary": "汇总员的总结评语 (30 字内)"
 }`
 };

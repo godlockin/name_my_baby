@@ -29,6 +29,8 @@ interface Env {
   GEMINI_API_KEY: string;
   /** Optional: Admin API key for protected routes */
   API_SECRET?: string;
+  /** Optional: Backdoor invite codes (comma-separated) */
+  BACKDOOR_INVITE_CODES?: string;
   /** Optional: Feature flags */
   ENABLE_RATE_LIMIT?: string;
   /** Rate limit: requests per minute per IP */
@@ -227,20 +229,39 @@ app.post("/generate", async (c) => {
 
     // Check invite code if provided
     let isPremium = false;
+    let inviteCodeWarning: string | undefined;
+
     if (input.inviteCode) {
-      const inviteValid = await verifyInviteCode(c.env.DB, input.inviteCode);
-      if (!inviteValid.valid) {
-        logger.info({ requestId, route: "/api/generate" }, "Invalid invite code", {
-          code: input.inviteCode,
-          reason: inviteValid.reason
+      // First check if it's a backdoor invite code from environment variable
+      const backdoorCodesEnv = c.env.BACKDOOR_INVITE_CODES;
+      console.log(`[InviteCode] BACKDOOR_INVITE_CODES env: ${backdoorCodesEnv ? "present" : "NOT SET"}`);
+      const backdoorCodes = backdoorCodesEnv?.split(",").map(c => c.trim().toUpperCase()) || [];
+      const normalizedCode = input.inviteCode.toUpperCase().trim();
+
+      console.log(`[InviteCode] Checking code: ${normalizedCode}, Backdoor codes: ${JSON.stringify(backdoorCodes)}`);
+      const isBackdoorCode = backdoorCodes.includes(normalizedCode);
+      console.log(`[InviteCode] Is backdoor code: ${isBackdoorCode}`);
+
+      if (!isBackdoorCode) {
+        // Check database for regular invite codes
+        const inviteValid = await verifyInviteCode(c.env.DB, normalizedCode);
+        if (!inviteValid.valid) {
+          // Don't fail the request - just log a warning and continue as non-premium
+          inviteCodeWarning = inviteValid.reason;
+          logger.info({ requestId, route: "/api/generate" }, "Invalid invite code (continuing as non-premium)", {
+            code: normalizedCode,
+            reason: inviteValid.reason
+          });
+        } else {
+          isPremium = true;
+        }
+      } else {
+        // Backdoor code is always valid and premium
+        isPremium = true;
+        logger.info({ requestId, route: "/api/generate" }, "Backdoor invite code used", {
+          code: normalizedCode
         });
-        return c.json<ApiError>({
-          error: "Invalid invite code",
-          code: "INVALID_INVITE_CODE",
-          reason: inviteValid.reason
-        }, 400);
       }
-      isPremium = true;
     }
 
     // Create session
@@ -271,7 +292,13 @@ app.post("/generate", async (c) => {
     // Run agent team synchronously and wait for completion
     // Note: This may take up to 60 seconds for Gemini API calls
     console.log(`[Generation:${sessionId}] Starting agent team with API key: ${c.env.GEMINI_API_KEY ? "present" : "MISSING!"}`);
-    const agentTeam = new AgentTeam({ apiKey: c.env.GEMINI_API_KEY });
+
+    // Use degraded mode if invite code was invalid (warning was set)
+    // In degraded mode, only poetry agent runs for faster results
+    const agentTeam = new AgentTeam({
+      apiKey: c.env.GEMINI_API_KEY,
+      degradedMode: !!inviteCodeWarning, // Run in degraded mode if invite code was invalid
+    });
     const agentContext = {
       sessionId,
       userInput: input,
