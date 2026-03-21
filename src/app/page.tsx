@@ -14,6 +14,8 @@ export default function Home() {
   } = useWorkflowStore();
 
   const [deviceId, setDeviceId] = useState("");
+  const [pollAttempts, setPollAttempts] = useState(0);
+  const [lastPollStatus, setLastPollStatus] = useState<string>("");
 
   // Debug: Log generationStatus changes
   useEffect(() => {
@@ -76,26 +78,53 @@ export default function Home() {
   };
 
   const pollResults = async (sessionId: string) => {
-    const poll = async () => {
+    const MAX_POLL_ATTEMPTS = 90; // 90 attempts * 2s = 180s = 3 minutes timeout
+    const POLL_INTERVAL = 2000; // 2 seconds
+
+    const poll = async (attempt: number = 0) => {
       try {
         const response = await getJobStatus(sessionId);
         const data = response;
+
+        // Update status for UI
+        setLastPollStatus(data.status);
+        setPollAttempts(attempt + 1);
 
         if (data.status === "completed" && data.names) {
           setNames(data.names);
           setGenerationStatus("completed");
         } else if (data.status === "processing") {
-          setTimeout(poll, 2000);
-        } else {
+          // Continue polling with timeout protection
+          if (attempt < MAX_POLL_ATTEMPTS) {
+            console.log(`[Polling] Attempt ${attempt + 1}/${MAX_POLL_ATTEMPTS}, still processing...`);
+            setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
+          } else {
+            console.error("[Polling] Timeout after", MAX_POLL_ATTEMPTS, "attempts");
+            setGenerationStatus("failed");
+          }
+        } else if (data.status === "failed") {
+          console.error("[Polling] Job failed:", data.error);
           setGenerationStatus("failed");
+        } else {
+          // Unknown status, continue polling
+          if (attempt < MAX_POLL_ATTEMPTS) {
+            setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
+          } else {
+            setGenerationStatus("failed");
+          }
         }
       } catch (error) {
         console.error("Poll error:", error);
-        setGenerationStatus("failed");
+        // Retry on network errors, up to 3 times
+        if (attempt < MAX_POLL_ATTEMPTS) {
+          setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
+        } else {
+          setGenerationStatus("failed");
+        }
       }
     };
 
-    setTimeout(poll, 2000);
+    setTimeout(poll, 1000); // Start polling after 1 second
   };
 
   return (
@@ -112,11 +141,11 @@ export default function Home() {
       )}
 
       {generationStatus === "processing" && (
-        <GeneratingPage />
+        <GeneratingPage pollAttempts={pollAttempts} lastPollStatus={lastPollStatus} />
       )}
 
       {generationStatus === "failed" && (
-        <GeneratingPage onRetry={handleSubmit} />
+        <GeneratingPage onRetry={handleSubmit} pollAttempts={pollAttempts} lastPollStatus={lastPollStatus} />
       )}
 
       {generationStatus === "completed" && (

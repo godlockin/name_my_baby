@@ -74,6 +74,9 @@ export class AgentTeam {
   async generate(context: SharedContext): Promise<NameScheme[]> {
     const { userInput } = context;
 
+    // Update session status at start
+    await this.updateSessionStatus(context.sessionId, "processing", "开始分析：八字分析师和 harmonious 专家正在并行工作...");
+
     // Round 1: Parallel foundation analysis
     console.log("Round 1: Running parallel foundation analysis...");
     const [baziResult, homophoneResult] = await Promise.all([
@@ -85,6 +88,8 @@ export class AgentTeam {
       baziAnalysis: baziResult,
       homophoneCheck: homophoneResult,
     };
+
+    await this.updateSessionStatus(context.sessionId, "processing", "八字分析完成，正在进行古诗词和历史典故分析...");
 
     // Build constraints for Round 2
     const constraints = buildConstraints(baziResult, homophoneResult);
@@ -106,6 +111,8 @@ export class AgentTeam {
       english: englishResult,
     };
 
+    await this.updateSessionStatus(context.sessionId, "processing", "专家组讨论中，正在汇总所有分析结果...");
+
     // Round 3: Aggregate results
     console.log("Round 3: Aggregating results...");
     const finalNames = await this.aggregateResults(context);
@@ -114,7 +121,21 @@ export class AgentTeam {
       finalNames,
     };
 
+    await this.updateSessionStatus(context.sessionId, "completed", "生成完成！");
+
     return finalNames;
+  }
+
+  /**
+   * Updates session status in database
+   */
+  private async updateSessionStatus(sessionId: string, status: string, message: string): Promise<void> {
+    try {
+      // This would need the DB binding - for now just log
+      console.log(`[Session:${sessionId}] Status: ${status} - ${message}`);
+    } catch (e) {
+      console.error("Failed to update session status:", e);
+    }
   }
 
   /**

@@ -12,55 +12,44 @@ interface StageInfo {
 
 interface GeneratingPageProps {
   onRetry?: () => void;
+  pollAttempts?: number;
+  lastPollStatus?: string;
 }
 
-export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry }) => {
+export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry, pollAttempts = 0, lastPollStatus = "processing" }) => {
   const { generationStatus } = useWorkflowStore();
-  const [progress, setProgress] = React.useState(0);
   const [currentStage, setCurrentStage] = React.useState("analyze");
-  const [estimatedTime, setEstimatedTime] = React.useState(30); // 30 seconds default
+  const [stageMessage, setStageMessage] = React.useState("正在初始化...");
 
-  // Simulate progress based on status
+  // Update stage and message based on poll attempts
   React.useEffect(() => {
     if (generationStatus !== "processing") return;
 
-    const stages = ["analyze", "generate", "evaluate", "finalize"];
-    const TOTAL_DURATION = 30000; // 30 seconds total
-    const STAGE_DURATION = TOTAL_DURATION / stages.length;
-    const PROGRESS_TICK = 100; // Update every 100ms
+    // Calculate progress based on poll attempts (max 90 attempts = 3 minutes)
+    const maxAttempts = 90;
+    const progress = Math.min((pollAttempts / maxAttempts) * 100, 99); // Cap at 99% until completed
 
-    const startTime = Date.now();
-    let lastStageIndex = 0;
-
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      const stageIndex = Math.min(
-        Math.floor(elapsed / STAGE_DURATION),
-        stages.length - 1
-      );
-
-      // Update stage
-      if (stageIndex !== lastStageIndex) {
-        setCurrentStage(stages[stageIndex]);
-        lastStageIndex = stageIndex;
-      }
-
-      // Update progress
-      const targetProgress = ((stageIndex + 1) / stages.length) * 100;
-      setProgress((prev) => {
-        if (prev >= targetProgress) return prev;
-        return Math.min(prev + 1, targetProgress);
-      });
-
-      // Update estimated remaining time
-      const remaining = Math.max(0, Math.ceil((TOTAL_DURATION - elapsed) / 1000));
-      setEstimatedTime(remaining);
-    }, PROGRESS_TICK);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [generationStatus]); // Only depend on generationStatus
+    // Update stage based on progress
+    if (pollAttempts < 15) {
+      setCurrentStage("analyze");
+      setStageMessage("八字分析师正在计算五行强弱，分析喜用神...");
+    } else if (pollAttempts < 30) {
+      setCurrentStage("analyze");
+      setStageMessage("谐音梗专家正在检查普通话、方言、中英文谐音...");
+    } else if (pollAttempts < 45) {
+      setCurrentStage("generate");
+      setStageMessage("古诗词专家正在查阅诗经、论语，寻找经典出处...");
+    } else if (pollAttempts < 60) {
+      setCurrentStage("generate");
+      setStageMessage("历史学家正在分析历史典故，确保名字有文化底蕴...");
+    } else if (pollAttempts < 75) {
+      setCurrentStage("evaluate");
+      setStageMessage("专家组正在综合讨论，筛选最优名字方案...");
+    } else {
+      setCurrentStage("finalize");
+      setStageMessage("汇总员正在整理最终结果，准备呈现给您...");
+    }
+  }, [pollAttempts, generationStatus]);
 
   const getStageStatus = (stageKey: string) => {
     const stages = defaultStages;
@@ -73,6 +62,10 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry }) => {
     if (stageIndex === currentIndex) return "active";
     return "pending";
   };
+
+  // Calculate progress percentage based on poll attempts
+  const progress = Math.min(Math.floor((pollAttempts / 90) * 100), 99);
+  const estimatedRemaining = Math.max(0, Math.ceil((90 - pollAttempts) * 2 / 3)); // Rough estimate in seconds
 
   if (generationStatus === "failed") {
     return (
@@ -161,8 +154,23 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry }) => {
             />
           </div>
           <div className="flex justify-between text-xs mt-2 text-gray-500">
-            <span>预计还需 {estimatedTime} 秒</span>
-            <span>请耐心等候...</span>
+            <span>预计还需 {estimatedRemaining} 秒</span>
+            <span>第 {pollAttempts} 次查询</span>
+          </div>
+        </div>
+
+        {/* Current Stage Message */}
+        <div className="mb-6 p-4 rounded-lg bg-[rgba(196,69,54,0.05)]">
+          <div className="flex items-start gap-3">
+            <div className="w-6 h-6 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center flex-shrink-0 animate-pulse-chinese">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-medium text-[var(--color-primary)] mb-1">专家组正在讨论</h3>
+              <p className="text-sm text-gray-600">{stageMessage}</p>
+            </div>
           </div>
         </div>
 
