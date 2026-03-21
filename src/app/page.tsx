@@ -69,7 +69,20 @@ export default function Home() {
 
       if (response.sessionId) {
         setSessionId(response.sessionId);
-        pollResults(response.sessionId);
+
+        // Handle synchronous response (API may return completed status immediately)
+        if (response.status === "completed" && response.names) {
+          console.log('[page.tsx] API returned completed status with names');
+          setNames(response.names);
+          setGenerationStatus("completed");
+        } else if (response.status === "failed") {
+          console.error('[page.tsx] API returned failed status:', response.error);
+          setGenerationStatus("failed");
+        } else {
+          // Start polling for async response
+          console.log('[page.tsx] Starting polling for async response');
+          pollResults(response.sessionId);
+        }
       }
     } catch (error) {
       console.error("Generation error:", error);
