@@ -74,24 +74,52 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
     return newErrors.length === 0;
   };
 
-  const handleNext = () => {
+  const handleNext = (e?: React.MouseEvent) => {
+    console.log('[StepForm] handleNext called, currentStep:', currentStep);
+    // Debug: Set a window flag to track handleNext calls
+    (window as any).__handleNextCalled = true;
+    (window as any).__handleNextCalledAt = new Date().toISOString();
+    // Prevent form submission event from bubbling up
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (validateCurrentStep()) {
       const success = nextStep();
+      console.log('[StepForm] nextStep returned:', success, 'new currentStep:', useWorkflowStore.getState().currentStep);
       if (success && onStepChange) {
         onStepChange(useWorkflowStore.getState().currentStep);
       }
     }
   };
 
-  const handlePrev = () => {
+  const handlePrev = (e?: React.MouseEvent) => {
+    // Prevent form submission event from bubbling up
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     prevStep();
     if (onStepChange) {
       onStepChange(useWorkflowStore.getState().currentStep);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    console.log('[StepForm] handleSubmit called, currentStep:', currentStep);
+    // Debug: Set a window flag to track handleSubmit calls
+    (window as any).__stepFormSubmitCalled = true;
+    (window as any).__stepFormSubmitCalledAt = new Date().toISOString();
+    (window as any).__stepFormSubmitCurrentStep = currentStep;
+    // Only allow submission on preferences step
+    if (currentStep !== "preferences") {
+      console.log('[StepForm] handleSubmit returning early, not on preferences step');
+      return;
+    }
+    if (e) {
+      e.preventDefault();
+    }
+    console.log('[StepForm] handleSubmit calling onSubmit');
     if (validateCurrentStep() && onSubmit) {
       onSubmit();
     }
@@ -147,7 +175,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
       </div>
 
       {/* Form Content */}
-      <form onSubmit={handleSubmit} className="card-chinese animate-fade-in">
+      <div className="card-chinese animate-fade-in">
         {currentStep === "family" && (
           <div className="space-y-6">
             <h2 className="text-xl font-semibold text-center mb-6 text-[var(--color-text)]">
@@ -209,7 +237,8 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
               <button
                 type="button"
                 onClick={addChild}
-                className="btn-secondary text-sm py-2 px-4"
+                disabled={children.length >= 4}
+                className="btn-secondary text-sm py-2 px-4 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 + 添加子女
               </button>
@@ -282,28 +311,58 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
 
                   <div>
                     <label className="label label-required">出生时间</label>
-                    <input
-                      type="datetime-local"
-                      className={`input w-full ${getError(`child-${index}-birthTime`) ? "input-error" : ""}`}
-                      value={child.birthTime || ""}
-                      onChange={(e) =>
-                        updateChild(child.id, { birthTime: e.target.value })
-                      }
-                      aria-invalid={!!getError(`child-${index}-birthTime`)}
-                      aria-describedby={getError(`child-${index}-birthTime`) ? errorId(`child-${index}-birthTime`) : undefined}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      格式：YYYY-MM-DD HH:MM
-                    </p>
-                    {getError(`child-${index}-birthTime`) && (
-                      <p
-                        id={errorId(`child-${index}-birthTime`)}
-                        className="text-sm text-[var(--color-error)] mt-1"
-                        role="alert"
+                    <div className="grid grid-cols-4 gap-2">
+                      {/* Year */}
+                      <select
+                        className="input"
+                        value={child.birthYear}
+                        onChange={(e) => updateChild(child.id, { birthYear: parseInt(e.target.value, 10) })}
+                        aria-label="出生年份"
                       >
-                        {getError(`child-${index}-birthTime`)}
-                      </p>
-                    )}
+                        {Array.from({ length: 10 }, (_, i) => 2021 + i).map((year) => (
+                          <option key={year} value={year}>{year}年</option>
+                        ))}
+                      </select>
+
+                      {/* Month */}
+                      <select
+                        className="input"
+                        value={child.birthMonth}
+                        onChange={(e) => updateChild(child.id, { birthMonth: parseInt(e.target.value, 10) })}
+                        aria-label="出生月份"
+                      >
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                          <option key={month} value={month}>{month}月</option>
+                        ))}
+                      </select>
+
+                      {/* Day */}
+                      <select
+                        className="input"
+                        value={child.birthDay}
+                        onChange={(e) => updateChild(child.id, { birthDay: parseInt(e.target.value, 10) })}
+                        aria-label="出生日期"
+                      >
+                        {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                          <option key={day} value={day}>{day}日</option>
+                        ))}
+                      </select>
+
+                      {/* Hour */}
+                      <select
+                        className="input"
+                        value={child.birthHour}
+                        onChange={(e) => updateChild(child.id, { birthHour: e.target.value })}
+                        aria-label="出生时辰"
+                      >
+                        {Array.from({ length: 24 }, (_, i) => i).map((hour) => (
+                          <option key={hour} value={hour.toString().padStart(2, "0")}>{hour}时</option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      年/月/日/时分别选择
+                    </p>
                   </div>
                 </div>
               </div>
@@ -325,8 +384,9 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
             </h2>
 
             <div>
-              <label className="label">字辈要求（可选）</label>
+              <label htmlFor="generation-char" className="label">字辈要求（可选）</label>
               <input
+                id="generation-char"
                 type="text"
                 className="input"
                 placeholder="如家族有字辈要求请填写"
@@ -339,8 +399,9 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
             </div>
 
             <div>
-              <label className="label">风格偏好（可选）</label>
+              <label htmlFor="style-pref" className="label">风格偏好（可选）</label>
               <input
+                id="style-pref"
                 type="text"
                 className="input"
                 placeholder="如：文雅、大气、古典、现代等"
@@ -366,8 +427,9 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
             </div>
 
             <div>
-              <label className="label">特殊要求（可选）</label>
+              <label htmlFor="special-requests" className="label">特殊要求（可选）</label>
               <textarea
+                id="special-requests"
                 className="input"
                 placeholder="其他特殊要求或说明，如希望避免的字、特定的寓意等"
                 value={specialRequests}
@@ -396,7 +458,7 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
           {currentStep !== "family" ? (
             <button
               type="button"
-              onClick={handlePrev}
+              onClick={(e) => handlePrev(e)}
               className="btn-secondary flex-1"
             >
               上一步
@@ -406,16 +468,16 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
           )}
 
           {currentStep === "preferences" ? (
-            <button type="submit" className="btn-primary flex-1">
+            <button type="button" onClick={handleSubmit} className="btn-primary flex-1">
               开始起名
             </button>
           ) : (
-            <button type="button" onClick={handleNext} className="btn-primary flex-1">
+            <button type="button" onClick={(e) => handleNext(e)} className="btn-primary flex-1">
               下一步
             </button>
           )}
         </div>
-      </form>
+      </div>
     </div>
   );
 };

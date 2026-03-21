@@ -268,17 +268,17 @@ app.post("/generate", async (c) => {
 
     logger.info({ requestId, sessionId }, "Session record created (processing state)");
 
-    // Run agent team asynchronously
+    // Run agent team asynchronously using waitUntil for proper background execution
     const generationPromise = (async () => {
       const agentTeam = new AgentTeam({ apiKey: c.env.GEMINI_API_KEY });
-      const context = {
+      const agentContext = {
         sessionId,
         userInput: input,
       };
 
       try {
         logger.info({ requestId, sessionId }, "Starting agent team generation");
-        const names = await agentTeam.generate(context);
+        const names = await agentTeam.generate(agentContext);
 
         // Validate generated names
         if (!names || names.length === 0) {
@@ -298,18 +298,32 @@ app.post("/generate", async (c) => {
 
         logger.info({ requestId, sessionId }, "Session updated with results");
 
-        // Mark invite code as used
+        // Mark invite code as used (only if not unlimited)
         if (input.inviteCode) {
-          await c.env.DB.prepare(
-            `UPDATE invite_codes SET status = 'used', used_by_device_id = ?, used_by_phone = ?, used_at = ?
-             WHERE code = ?`
+          // First check if the code is unlimited
+          const inviteInfo = await c.env.DB.prepare(
+            "SELECT is_unlimited FROM invite_codes WHERE code = ?"
           )
-            .bind(deviceId || "unknown", input.phone || null, Date.now(), input.inviteCode)
-            .run();
+            .bind(input.inviteCode)
+            .first<{ is_unlimited: number }>();
 
-          logger.info({ requestId, sessionId }, "Invite code marked as used", {
-            code: input.inviteCode
-          });
+          // Only mark as used if it's NOT an unlimited code
+          if (inviteInfo && inviteInfo.is_unlimited !== 1) {
+            await c.env.DB.prepare(
+              `UPDATE invite_codes SET status = 'used', used_by_device_id = ?, used_by_phone = ?, used_at = ?
+               WHERE code = ?`
+            )
+              .bind(deviceId || "unknown", input.phone || null, Date.now(), input.inviteCode)
+              .run();
+
+            logger.info({ requestId, sessionId }, "Invite code marked as used", {
+              code: input.inviteCode
+            });
+          } else {
+            logger.info({ requestId, sessionId }, "Unlimited invite code used (not marked as used)", {
+              code: input.inviteCode
+            });
+          }
         }
 
         return { success: true, names };
@@ -338,10 +352,17 @@ app.post("/generate", async (c) => {
       }
     })();
 
-    // Fire and forget - don't await
-    generationPromise.catch((err) => {
-      logger.error({ requestId }, "Unhandled generation promise error", err);
-    });
+    // Use waitUntil to ensure background task completes
+    // @ts-ignore - executionCtx is available via Hono's context
+    if (c.executionCtx && typeof c.executionCtx.waitUntil === "function") {
+      // @ts-ignore
+      c.executionCtx.waitUntil(generationPromise);
+    } else {
+      // Fallback for local dev
+      generationPromise.catch((err) => {
+        logger.error({ requestId }, "Unhandled generation promise error", err);
+      });
+    }
 
     // Return session ID for polling immediately
     return c.json({
@@ -658,6 +679,7 @@ app.get("/history", async (c) => {
  * @body {number} [count=1] - Number of codes to generate
  * @body {string} [creatorDeviceId] - Creator device ID
  * @body {string} [creatorPhone] - Creator phone number
+ * @body {boolean} [isUnlimited=false] - Whether to create unlimited use codes
  * @returns {AdminGenerateInviteResponse} - Generated codes
  */
 app.post("/admin/invite/generate", async (c) => {
@@ -681,6 +703,7 @@ app.post("/admin/invite/generate", async (c) => {
     const count = typeof body.count === "number" ? body.count : 1;
     const creatorDeviceId = body.creatorDeviceId as string | undefined;
     const creatorPhone = body.creatorPhone as string | undefined;
+    const isUnlimited = body.isUnlimited === true;
 
     // Validate count
     if (count < 1 || count > 100) {
@@ -692,7 +715,8 @@ app.post("/admin/invite/generate", async (c) => {
 
     const codes: string[] = [];
     const now = Date.now();
-    const expiresAt = now + 30 * 24 * 60 * 60 * 1000; // 30 days
+    // Unlimited codes never expire, regular codes expire in 30 days
+    const expiresAt = isUnlimited ? 9999999999999 : now + 30 * 24 * 60 * 60 * 1000;
 
     // Use transaction-like pattern for batch insert
     for (let i = 0; i < count; i++) {
@@ -700,10 +724,10 @@ app.post("/admin/invite/generate", async (c) => {
       codes.push(code);
 
       await c.env.DB.prepare(
-        `INSERT INTO invite_codes (code, creator_device_id, creator_phone, status, created_at, expires_at)
-         VALUES (?, ?, ?, 'available', ?, ?)`
+        `INSERT INTO invite_codes (code, creator_device_id, creator_phone, status, is_unlimited, created_at, expires_at)
+         VALUES (?, ?, ?, 'available', ?, ?, ?)`
       )
-        .bind(code, creatorDeviceId || "admin", creatorPhone || null, now, expiresAt)
+        .bind(code, creatorDeviceId || "admin", creatorPhone || null, isUnlimited ? 1 : 0, now, expiresAt)
         .run();
     }
 
@@ -807,13 +831,18 @@ async function verifyInviteCode(
   code: string
 ): Promise<{ valid: boolean; reason?: string }> {
   const result = await db.prepare(
-    "SELECT code, status, expires_at FROM invite_codes WHERE code = ?"
+    "SELECT code, status, expires_at, is_unlimited FROM invite_codes WHERE code = ?"
   )
     .bind(code)
-    .first<{ code: string; status: string; expires_at: number }>();
+    .first<{ code: string; status: string; expires_at: number; is_unlimited: number }>();
 
   if (!result) {
     return { valid: false, reason: "邀请码不存在" };
+  }
+
+  // Unlimited codes never expire and can be used multiple times
+  if (result.is_unlimited === 1) {
+    return { valid: true };
   }
 
   if (result.status === "used") {

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS invite_codes (
   used_by_device_id TEXT,
   used_by_phone TEXT,
   status TEXT NOT NULL DEFAULT 'available' CHECK(status IN ('available', 'used', 'expired')),
+  is_unlimited INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   used_at INTEGER,
   expires_at INTEGER NOT NULL

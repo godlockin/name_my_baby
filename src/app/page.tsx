@@ -3,23 +3,22 @@
 import { useWorkflowStore } from "../stores/workflow";
 import { useState, useEffect } from "react";
 import { generateName, getJobStatus } from "../lib/api";
-import { StepForm, GeneratingPage, ResultsList, ResultDetail } from "../components";
-import type { NameResult } from "../components/ResultsList";
+import { StepForm, GeneratingPage, ResultsList } from "../components";
 
 export default function Home() {
   const {
     fatherName, motherName, children, generationChar, stylePreference,
     specialRequests, phone, inviteCode,
     startGeneration, setSessionId, setGenerationStatus, setNames,
-    generationStatus, names, savedNames, saveName, removeSavedName, reset
+    generationStatus, reset, currentStep
   } = useWorkflowStore();
 
   const [deviceId, setDeviceId] = useState("");
-  const [selectedName, setSelectedName] = useState<NameResult | null>(null);
-  
-  // Progress simulation states
-  const [progress, setProgress] = useState(0);
-  const [currentStage, setCurrentStage] = useState("analyze");
+
+  // Debug: Log generationStatus changes
+  useEffect(() => {
+    console.log('[page.tsx] generationStatus changed to:', generationStatus);
+  }, [generationStatus]);
 
   useEffect(() => {
     let id = localStorage.getItem("deviceId");
@@ -35,22 +34,20 @@ export default function Home() {
       id: child.id,
       name: child.name,
       gender: child.gender,
-      birthTime: `${child.birthYear}-${String(child.birthMonth).padStart(2, "0")}-${String(child.birthDay).padStart(2, "0")}T${child.birthHour}:00`,
+      birthYear: child.birthYear,
+      birthMonth: child.birthMonth,
+      birthDay: child.birthDay,
+      birthHour: child.birthHour,
     }));
   };
 
-  const simulateProgress = () => {
-    setProgress(0);
-    setCurrentStage("analyze");
-    
-    setTimeout(() => { setProgress(30); setCurrentStage("generate"); }, 2000);
-    setTimeout(() => { setProgress(60); setCurrentStage("evaluate"); }, 4000);
-    setTimeout(() => { setProgress(85); setCurrentStage("finalize"); }, 6000);
-  };
-
   const handleSubmit = async () => {
+    console.log('[page.tsx] handleSubmit called, generationStatus:', generationStatus, 'currentStep:', currentStep);
+    // Debug: Set a window flag to track if handleSubmit was called
+    (window as any).__handleSubmitCalled = true;
+    (window as any).__handleSubmitCalledAt = new Date().toISOString();
+    (window as any).__handleSubmitCurrentStep = currentStep;
     startGeneration();
-    simulateProgress();
 
     try {
       const data = {
@@ -65,6 +62,7 @@ export default function Home() {
         deviceId,
       };
 
+      console.log('[page.tsx] Calling generateName API');
       const response = await generateName(data);
 
       if (response.sessionId) {
@@ -84,7 +82,6 @@ export default function Home() {
         const data = response;
 
         if (data.status === "completed" && data.names) {
-          setProgress(100);
           setNames(data.names);
           setGenerationStatus("completed");
         } else if (data.status === "processing") {
@@ -101,26 +98,6 @@ export default function Home() {
     setTimeout(poll, 2000);
   };
 
-  const handleToggleSave = (name: NameResult) => {
-    const isSaved = savedNames.some(n => n.id === name.id);
-    if (isSaved) {
-      removeSavedName(name.id);
-    } else {
-      saveName(name as any);
-    }
-  };
-
-  // Maps the store names to the ui names properly adding isSaved flag.
-  const mappedNames = names.map(n => ({
-    ...n,
-    isSaved: savedNames.some(sn => sn.id === n.id)
-  })) as NameResult[];
-
-  const mappedSavedNames = savedNames.map(n => ({
-    ...n,
-    isSaved: true
-  })) as NameResult[];
-
   return (
     <main className="min-h-screen">
       {/* View based on current generationStatus */}
@@ -135,30 +112,17 @@ export default function Home() {
       )}
 
       {generationStatus === "processing" && (
-        <GeneratingPage status="processing" progress={progress} currentStage={currentStage} />
+        <GeneratingPage />
       )}
 
       {generationStatus === "failed" && (
-        <GeneratingPage status="failed" />
+        <GeneratingPage onRetry={handleSubmit} />
       )}
 
       {generationStatus === "completed" && (
         <ResultsList
-          names={mappedNames}
-          savedNames={mappedSavedNames}
-          onSelectName={setSelectedName}
-          onToggleSave={handleToggleSave}
           onBack={reset}
           onRegenerate={handleSubmit}
-        />
-      )}
-
-      {/* Result Detail Overlay */}
-      {selectedName && (
-        <ResultDetail
-          name={selectedName}
-          onClose={() => setSelectedName(null)}
-          onToggleSave={() => handleToggleSave(selectedName)}
         />
       )}
     </main>

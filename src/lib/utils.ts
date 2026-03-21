@@ -34,7 +34,7 @@ export function generateSessionId(): string {
  * @example
  * ```typescript
  * const childId = generateChildId();
- * const child: ChildInfo = { id: childId, gender: "male", birthTime: "2024-01-01T00:00:00Z" };
+ * const child: ChildInfo = { id: childId, gender: "male", birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: "00" };
  * ```
  */
 export function generateChildId(): string {
@@ -186,8 +186,21 @@ export function validateInput(input: UserInput): { valid: boolean; errors: strin
       if (!child.gender || !["male", "female"].includes(child.gender)) {
         errors.push("子女性别必须是 male 或 female");
       }
-      if (!child.birthTime) {
-        errors.push("子女出生时间不能为空");
+      // Validate birth time fields (year, month, day, hour)
+      if (!child.birthYear || !child.birthMonth || !child.birthDay || !child.birthHour) {
+        errors.push("子女出生时间（年月日时）必须完整填写");
+      }
+      // Validate month range
+      if (child.birthMonth && (child.birthMonth < 1 || child.birthMonth > 12)) {
+        errors.push("出生月份必须在 1-12 之间");
+      }
+      // Validate day range
+      if (child.birthDay && (child.birthDay < 1 || child.birthDay > 31)) {
+        errors.push("出生日期必须在 1-31 之间");
+      }
+      // Validate hour format (00-23)
+      if (child.birthHour && (parseInt(child.birthHour, 10) < 0 || parseInt(child.birthHour, 10) > 23)) {
+        errors.push("出生时辰必须在 00-23 之间");
       }
     }
   }

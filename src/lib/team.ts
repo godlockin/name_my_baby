@@ -122,7 +122,10 @@ export class AgentTeam {
    */
   private async runBaziAgent(input: UserInput): Promise<AgentOutput<BaziData>> {
     const context = this.formatInputContext(input);
-    return this.runAgentFn<BaziData>(BAZI_AGENT, { context }, this.apiKey);
+    console.log("[BaziAgent] Starting agent run with context:", context.substring(0, 100));
+    const result = await this.runAgentFn<BaziData>(BAZI_AGENT, { context }, this.apiKey);
+    console.log("[BaziAgent] Agent returned:", result.status);
+    return result;
   }
 
   /**
@@ -130,7 +133,10 @@ export class AgentTeam {
    */
   private async runHomophoneAgent(input: UserInput): Promise<AgentOutput<HomophoneData>> {
     const context = this.formatInputContext(input);
-    return this.runAgentFn<HomophoneData>(HOMOPHONE_AGENT, { context }, this.apiKey);
+    console.log("[HomophoneAgent] Starting agent run");
+    const result = await this.runAgentFn<HomophoneData>(HOMOPHONE_AGENT, { context }, this.apiKey);
+    console.log("[HomophoneAgent] Agent returned:", result.status);
+    return result;
   }
 
   /**
@@ -227,7 +233,7 @@ export class AgentTeam {
     const childrenInfo = input.children
       .map(
         (child, index) =>
-          `子女${index + 1}: ${child.gender === "male" ? "男" : "女"}, 出生时间：${child.birthTime}`
+          `子女${index + 1}: ${child.gender === "male" ? "男" : "女"}, 出生时间：${child.birthYear}年${child.birthMonth}月${child.birthDay}日${child.birthHour}时`
       )
       .join("\n");
 

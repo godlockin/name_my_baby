@@ -87,39 +87,46 @@ export async function runAgent<T>(
   try {
     const prompt = buildPrompt(config, options);
 
+    console.log(`[Agent:${config.name}] Starting HTTPS request to Gemini API...`);
+
+    const requestBody = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 32768,
+        responseMimeType: "application/json",
+      },
+    });
+
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: prompt,
-                },
-              ],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-            responseMimeType: "application/json",
-          },
-        }),
+        body: requestBody,
+        // Add signal for timeout handling
+        signal: AbortSignal.timeout(60000), // 60 second timeout
       }
     );
 
+    console.log(`[Agent:${config.name}] Response status: ${response.status}`);
+
     if (!response.ok) {
-      const errorBody = await response.text().catch(() => "Unknown body");
-      throw createGeminiError(`Gemini API error: ${response.status} ${response.statusText}`, response.status);
+      throw createGeminiError(`Gemini API error: ${response.status}`, response.status);
     }
 
-    const data = (await response.json()) as GeminiResponse;
-    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const geminiResponse = await response.json() as GeminiResponse;
+    const content = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!content) {
       return {

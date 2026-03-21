@@ -18,8 +18,12 @@ export interface UserInput {
 
 export interface ChildInfo {
   id: string;
+  name?: string; // Optional, for reference only
   gender: "male" | "female";
-  birthTime: string; // ISO 8601 format
+  birthYear: number;    // YYYY format, e.g., 2024
+  birthMonth: number;   // MM format (1-12)
+  birthDay: number;     // DD format (1-31)
+  birthHour: string;    // HH format (00-23)
 }
 
 // ============================================================================
