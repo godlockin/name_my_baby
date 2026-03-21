@@ -2,7 +2,8 @@ name = "name-my-baby"
 pages_build_output_dir = ".vercel/output/static"
 
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
+API_SECRET = "Cola001"
 
 compatibility_flags = ["nodejs_compat"]
 compatibility_date = "2024-01-01"
