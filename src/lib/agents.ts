@@ -324,14 +324,14 @@ export const POETRY_AGENT: AgentConfig = {
     {
       "char": "字",
       "source": "poetry",
-      "level": "确凿出处 | 类似意境 | 美好寓意",
+      "level": "确凿出处",
       "original": "原句",
       "meaning": "寓意",
       "radicals": ["偏旁"],
-      "gender": "male|female|unisex"
+      "gender": "male"
     }
   ],
-  "notes": "古诗词专家的简短评语，例如：'此字出自论语，寓意君子品格'"
+  "notes": "古诗词专家的简短评语"
 }`
 };
 
@@ -358,7 +358,7 @@ export const HISTORY_AGENT: AgentConfig = {
       "historicalNote": "历史典故说明"
     }
   ],
-  "notes": "历史学家的简短评语，例如：'此字在唐代常用于贵族名字'"
+  "notes": "历史学家的简短评语"
 }`
 };
 
@@ -379,14 +379,14 @@ export const ENGLISH_AGENT: AgentConfig = {
 {
   "candidateNames": [
     {
-      "name": "英文名",
-      "etymology": "词源（希伯来语/拉丁语/希腊语等）",
-      "meaning": "原始含义",
-      "relationToChinese": "与中文名的关联方式",
-      "gender": "male|female|unisex"
+      "name": "EnglishName",
+      "etymology": "Latin",
+      "meaning": "light",
+      "relationToChinese": "Same meaning as Chinese name",
+      "gender": "male"
     }
   ],
-  "notes": "英文专家的简短评语，例如：'This name has Hebrew origins meaning grace'"
+  "notes": "英文专家的简短评语"
 }`
 };
 
@@ -406,34 +406,23 @@ export const AGGREGATOR_AGENT: AgentConfig = {
    - 女性名字：优先出自诗经（不必须，可灵活选择）
 3. 每个方案必须包含 agentNotes 字段，用于在「专家组综合考量」中展示
 
-每个方案包含：
-- 中文名
-- 英文名（如有）
-- 核心寓意
-- 五行分析
-- 谐音检查结果
-- 诗词出处（如有）
-- 历史典故（如有）
-- 英文名来源（如有）
-- agentNotes：各专家的简短评语（用于展示）
-
 输出 JSON 格式：
 {
   "nameSchemes": [
     {
-      "id": "唯一 ID",
+      "id": "unique_id_string",
       "chineseName": "中文名",
-      "englishName": "英文名",
+      "englishName": "English Name",
       "coreMeaning": "核心寓意",
       "baziAnalysis": "五行分析说明",
       "homophoneCheck": {
-        "mandarin": "safe|medium|high",
-        "dialects": [],
-        "english": "safe|medium|high",
-        "overall": "safe|medium|high"
+        "mandarin": "safe",
+        "dialects": [{"dialect": "粤语", "risk": "safe", "note": ""}],
+        "english": "safe",
+        "overall": "safe"
       },
       "poetryReference": {
-        "level": "确凿出处 | 类似意境 | 美好寓意",
+        "level": "确凿出处",
         "source": "出处",
         "explanation": "解释"
       },
