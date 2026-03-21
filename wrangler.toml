@@ -6,7 +6,6 @@ compatibility_date = "2024-01-01"
 [vars]
 ENVIRONMENT = "production"
 API_SECRET = "Cola001"
-GEMINI_API_KEY = "AIzaSyCEG6jEq2--gayCe4X10RYmu5yV7XPmEkY"
 
 [dev]
 port = 3001
