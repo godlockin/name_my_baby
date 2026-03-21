@@ -9,7 +9,7 @@
     "lint": "next lint",
     "pages:build": "npx @cloudflare/next-on-pages",
     "preview": "npx @cloudflare/next-on-pages && wrangler pages dev .vercel/output/static",
-    "deploy": "npx @cloudflare/next-on-pages && wrangler pages deploy .vercel/output/static",
+    "deploy": "./scripts/prepare-deploy.sh && wrangler pages deploy .vercel/output --project-name=name-my-baby --branch=main --commit-dirty=true",
     "db:migrate": "wrangler d1 execute name-my-baby-db --local --file=./src/db/migrations/001_init.sql && wrangler d1 execute name-my-baby-db --local --file=./src/db/migrations/002_add_unlimited_invite.sql",
     "db:migrate:prod": "wrangler d1 execute name-my-baby-db --file=./src/db/migrations/001_init.sql && wrangler d1 execute name-my-baby-db --file=./src/db/migrations/002_add_unlimited_invite.sql",
     "test:e2e": "npx playwright test",

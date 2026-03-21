@@ -5,6 +5,7 @@ node_modules/
 .env
 .env.local
 .env.*.local
+.env.example.backup
 
 # Build output
 output/
@@ -37,3 +38,12 @@ coverage/
 .playwright-mcp/
 .claude/settings.local.json
 .serena/
+
+# Sensitive information
+# Never commit API keys, credentials, or configuration files with secrets
+*.secret
+*.key
+*.pem
+*.crt
+private/
+secrets/
