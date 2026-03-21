@@ -11,6 +11,7 @@ interface WorkflowState {
   specialRequests: string;
   phone: string;
   inviteCode: string;
+  surnameChoice: "father" | "mother"; // 随父姓或随母姓
 
   // UI state
   currentStep: "family" | "children" | "preferences";
@@ -33,6 +34,7 @@ interface WorkflowState {
   setSpecialRequests: (req: string) => void;
   setPhone: (phone: string) => void;
   setInviteCode: (code: string) => void;
+  setSurnameChoice: (choice: "father" | "mother") => void;
   nextStep: () => boolean;
   prevStep: () => void;
   startGeneration: () => void;
@@ -77,6 +79,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => {
     specialRequests: "",
     phone: "",
     inviteCode: "",
+    surnameChoice: "father", // Default to father's surname
 
     currentStep: "family",
     isGenerating: false,
@@ -133,6 +136,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => {
     setPhone: (phone) => set({ phone }),
 
     setInviteCode: (code) => set({ inviteCode: code }),
+
+    setSurnameChoice: (choice) => set({ surnameChoice: choice }),
 
     nextStep: () => {
       const { currentStep, fatherName, motherName, children } = get();
@@ -209,6 +214,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => {
         specialRequests: "",
         phone: "",
         inviteCode: "",
+        surnameChoice: "father",
         currentStep: "family",
         isGenerating: false,
         sessionId: null,

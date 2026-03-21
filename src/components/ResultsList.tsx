@@ -3,6 +3,7 @@
 import React from "react";
 import { useWorkflowStore } from "../stores/workflow";
 import type { NameScheme } from "../types";
+import TreeDiagram from "./TreeDiagram";
 
 export interface NameResult {
   id: string;
@@ -61,9 +62,10 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   onBack,
   onRegenerate,
 }) => {
-  const { names, savedNames, saveName, removeSavedName } = useWorkflowStore();
+  const { names, savedNames, saveName, removeSavedName, fatherName, motherName, children } = useWorkflowStore();
   const [filter, setFilter] = React.useState<"all" | "saved">("all");
   const [sortBy, setSortBy] = React.useState<"score" | "cultural" | "phonetic">("score");
+  const [selectedName, setSelectedName] = React.useState<NameScheme | null>(null);
 
   // Convert NameScheme to NameResult for display
   const displayedNames: NameResult[] = React.useMemo(() => {
@@ -169,7 +171,12 @@ export const ResultsList: React.FC<ResultsListProps> = ({
               <div
                 key={name.id}
                 className="card name-card cursor-pointer"
-                onClick={() => {}}
+                onClick={() => {
+                  const originalScheme = names.find((n) => n.id === name.id) || savedNames.find((n) => n.id === name.id);
+                  if (originalScheme) {
+                    setSelectedName(originalScheme);
+                  }
+                }}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div>
@@ -271,6 +278,33 @@ export const ResultsList: React.FC<ResultsListProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Name Detail Modal */}
+      {selectedName && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold">名字详情</h2>
+              <button
+                onClick={() => setSelectedName(null)}
+                className="p-2 hover:bg-gray-100 rounded-full"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6">
+              <TreeDiagram
+                nameScheme={selectedName}
+                fatherName={fatherName}
+                motherName={motherName}
+                children={children}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -14,6 +14,7 @@ export interface UserInput {
   phone?: string;
   inviteCode?: string;
   deviceId?: string;
+  surnameChoice?: "father" | "mother"; // 随父姓或随母姓
 }
 
 export interface ChildInfo {
@@ -114,6 +115,16 @@ export interface NameScheme {
   englishEtymology?: EnglishEtymology;
   childrenCorrelation?: string; // For multiple children
   isPremium: boolean;
+  // Extended analysis data for tree diagram display
+  baziDetails?: BaziData; // 八字排盘详情
+  fiveElementsDistribution?: string; // 五行分布
+  agentNotes?: {
+    bazi?: string; // 八字分析师注释
+    homophone?: string; // 谐音梗专家注释
+    poetry?: string; // 古诗词专家注释
+    history?: string; // 历史学家注释
+  };
+  surnameSource?: "father" | "mother"; // 姓氏来源
 }
 
 export interface HomophoneResult {
