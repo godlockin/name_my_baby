@@ -75,9 +75,9 @@ export class AgentTeam {
     const { userInput } = context;
 
     // Update session status at start
-    await this.updateSessionStatus(context.sessionId, "processing", "开始分析：八字分析师和 harmonious 专家正在并行工作...");
+    await this.updateSessionStatus(context.sessionId, "processing", "开始分析：八字分析师和谐音梗专家正在并行工作...");
 
-    // Round 1: Parallel foundation analysis
+    // Round 1: Parallel foundation analysis (Bazi + Homophone)
     console.log("Round 1: Running parallel foundation analysis...");
     const [baziResult, homophoneResult] = await Promise.all([
       this.runBaziAgent(userInput),
@@ -89,20 +89,18 @@ export class AgentTeam {
       homophoneCheck: homophoneResult,
     };
 
-    await this.updateSessionStatus(context.sessionId, "processing", "八字分析完成，正在进行古诗词和历史典故分析...");
+    await this.updateSessionStatus(context.sessionId, "processing", "八字分析完成，正在进行古诗词/历史/英文专家分析...");
 
     // Build constraints for Round 2
     const constraints = buildConstraints(baziResult, homophoneResult);
 
-    // Round 2: Parallel creative analysis
+    // Round 2: Parallel creative analysis (Poetry + History + English) - ALL users get English names
     console.log("Round 2: Running parallel creative analysis...");
-    const isPremium = isPremiumUser(context);
 
     const [poetryResult, historyResult, englishResult] = await Promise.all([
       this.runPoetryAgent(userInput, constraints),
       this.runHistoryAgent(userInput, constraints),
-      // Only run English agent for premium users
-      isPremium ? this.runEnglishAgent(userInput, constraints) : Promise.resolve(this.createEmptyEnglishResult()),
+      this.runEnglishAgent(userInput, constraints), // All users get English names
     ]);
 
     context.round2 = {
@@ -185,17 +183,6 @@ export class AgentTeam {
   }
 
   /**
-   * Creates an empty English result for non-premium users
-   */
-  private createEmptyEnglishResult(): AgentOutput<EnglishData> {
-    return {
-      status: "success",
-      data: { candidateNames: [] },
-      notes: "English names not available for free users",
-    };
-  }
-
-  /**
    * Aggregates all agent results into final name recommendations
    *
    * @param context - Context with all round results
@@ -211,7 +198,7 @@ export class AgentTeam {
 
     const isPremium = isPremiumUser(context);
 
-    // Build aggregation context
+    // Build aggregation context - include gender info for典籍偏好
     const aggregationContext = JSON.stringify({
       userInput,
       bazi: round1.baziAnalysis,
@@ -232,15 +219,15 @@ export class AgentTeam {
       throw new Error(`Aggregation failed: ${result.notes}`);
     }
 
-    // Post-process: ensure correct premium flag and limit results
+    // Post-process: limit results for free users but KEEP english names
     let schemes = result.data.nameSchemes || [];
 
     if (!isPremium) {
-      // Free users get only 2 basic schemes
+      // Free users get only 2 basic schemes (but still get English names)
       schemes = schemes.slice(0, 2).map((scheme) => ({
         ...scheme,
         isPremium: false,
-        englishName: undefined,
+        // Keep englishName for all users now
       }));
     }
 
