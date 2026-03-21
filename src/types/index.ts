@@ -255,11 +255,15 @@ export interface ApiError {
 
 /**
  * POST /api/generate response
+ * Now supports both synchronous (completed) and asynchronous (processing) modes
  */
 export interface GenerateResponse {
   sessionId: string;
-  status: "processing";
-  estimatedTime: number; // seconds
+  status: "processing" | "completed" | "failed";
+  estimatedTime?: number; // seconds (only for processing status)
+  names?: NameScheme[]; // only for completed status
+  isPremium?: boolean;
+  error?: string; // only for failed status
 }
 
 /**
