@@ -122,7 +122,10 @@ export async function runAgent<T>(
     console.log(`[Agent:${config.name}] Response status: ${response.status}`);
 
     if (!response.ok) {
-      throw createGeminiError(`Gemini API error: ${response.status}`, response.status);
+      // Try to get error details from response
+      const errorBody = await response.text();
+      console.error(`[Agent:${config.name}] Gemini API error body:`, errorBody);
+      throw createGeminiError(`Gemini API error: ${response.status} - ${errorBody}`, response.status);
     }
 
     const geminiResponse = await response.json() as GeminiResponse;
