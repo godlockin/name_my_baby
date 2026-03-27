@@ -264,6 +264,13 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                 </div>
               )}
             </div>
+
+            {/* 显示提示如果所有专家注释都为空 */}
+            {!agentNotes.bazi && !agentNotes.homophone && !agentNotes.poetry && !agentNotes.history && (
+              <p className="text-gray-500 text-sm text-center py-8">
+                专家组分析数据暂未提供
+              </p>
+            )}
           </div>
         )}
       </div>
