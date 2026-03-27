@@ -14,6 +14,14 @@ interface FormError {
   message: string;
 }
 
+type DebugWindow = Window & {
+  __handleNextCalled?: boolean;
+  __handleNextCalledAt?: string;
+  __stepFormSubmitCalled?: boolean;
+  __stepFormSubmitCalledAt?: string;
+  __stepFormSubmitCurrentStep?: unknown;
+};
+
 export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) => {
   const {
     fatherName,
@@ -77,8 +85,9 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
   const handleNext = (e?: React.MouseEvent) => {
     console.log('[StepForm] handleNext called, currentStep:', currentStep);
     // Debug: Set a window flag to track handleNext calls
-    (window as any).__handleNextCalled = true;
-    (window as any).__handleNextCalledAt = new Date().toISOString();
+    const debugWindow = window as DebugWindow;
+    debugWindow.__handleNextCalled = true;
+    debugWindow.__handleNextCalledAt = new Date().toISOString();
     // Prevent form submission event from bubbling up
     if (e) {
       e.preventDefault();
@@ -108,9 +117,10 @@ export const StepForm: React.FC<StepFormProps> = ({ onStepChange, onSubmit }) =>
   const handleSubmit = (e?: React.FormEvent) => {
     console.log('[StepForm] handleSubmit called, currentStep:', currentStep);
     // Debug: Set a window flag to track handleSubmit calls
-    (window as any).__stepFormSubmitCalled = true;
-    (window as any).__stepFormSubmitCalledAt = new Date().toISOString();
-    (window as any).__stepFormSubmitCurrentStep = currentStep;
+    const debugWindow = window as DebugWindow;
+    debugWindow.__stepFormSubmitCalled = true;
+    debugWindow.__stepFormSubmitCalledAt = new Date().toISOString();
+    debugWindow.__stepFormSubmitCurrentStep = currentStep;
     // Only allow submission on preferences step
     if (currentStep !== "preferences") {
       console.log('[StepForm] handleSubmit returning early, not on preferences step');

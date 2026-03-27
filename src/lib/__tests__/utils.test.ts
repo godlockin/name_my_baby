@@ -235,7 +235,7 @@ describe('Utils - validateInput', () => {
   const createValidInput = (): UserInput => ({
     fatherName: '张伟',
     motherName: '李娜',
-    children: [{ id: '1', gender: 'male', birthTime: '2024-01-01T00:00:00Z' }],
+    children: [{ id: '1', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
   });
 
   describe('father name validation', () => {
@@ -324,7 +324,7 @@ describe('Utils - validateInput', () => {
     it('should fail with invalid child gender', () => {
       const input = {
         ...createValidInput(),
-        children: [{ id: '1', gender: 'invalid' as unknown as 'male' | 'female', birthTime: '2024-01-01T00:00:00Z' }],
+        children: [{ id: '1', gender: 'invalid' as unknown as 'male' | 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
       };
       const result = validateInput(input);
 
@@ -335,7 +335,7 @@ describe('Utils - validateInput', () => {
     it('should fail with missing child gender', () => {
       const input = {
         ...createValidInput(),
-        children: [{ id: '1', gender: '' as unknown as 'male' | 'female', birthTime: '2024-01-01T00:00:00Z' }],
+        children: [{ id: '1', gender: '' as unknown as 'male' | 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
       };
       const result = validateInput(input);
 
@@ -346,20 +346,20 @@ describe('Utils - validateInput', () => {
     it('should fail with missing birth time', () => {
       const input = {
         ...createValidInput(),
-        children: [{ id: '1', gender: 'male', birthTime: '' }],
+        children: [{ id: '1', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '' }],
       };
       const result = validateInput(input);
 
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('子女出生时间不能为空');
+      expect(result.errors).toContain('子女出生时间（年月日时）必须完整填写');
     });
 
     it('should pass with multiple valid children', () => {
       const input = {
         ...createValidInput(),
         children: [
-          { id: '1', gender: 'male', birthTime: '2024-01-01T00:00:00Z' },
-          { id: '2', gender: 'female', birthTime: '2024-06-15T12:30:00Z' },
+          { id: '1', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
+          { id: '2', gender: 'female', birthYear: 2024, birthMonth: 6, birthDay: 15, birthHour: '12' },
         ],
       };
       const result = validateInput(input);
@@ -372,14 +372,14 @@ describe('Utils - validateInput', () => {
       const input = {
         ...createValidInput(),
         children: [
-          { id: '1', gender: 'male', birthTime: '2024-01-01T00:00:00Z' },
-          { id: '2', gender: 'female', birthTime: '' },
+          { id: '1', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
+          { id: '2', gender: 'female', birthYear: 2024, birthMonth: 6, birthDay: 15, birthHour: '' },
         ],
       };
       const result = validateInput(input);
 
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain('子女出生时间不能为空');
+      expect(result.errors).toContain('子女出生时间（年月日时）必须完整填写');
     });
   });
 
@@ -388,7 +388,7 @@ describe('Utils - validateInput', () => {
       const input = {
         fatherName: '',
         motherName: '李',
-        children: [{ id: '1', gender: 'invalid' as unknown as 'male' | 'female', birthTime: '' }],
+        children: [{ id: '1', gender: 'invalid' as unknown as 'male' | 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '' }],
       };
       const result = validateInput(input);
 
@@ -397,7 +397,7 @@ describe('Utils - validateInput', () => {
       expect(result.errors).toContain('父亲姓名至少 2 个字');
       expect(result.errors).toContain('母亲姓名至少 2 个字');
       expect(result.errors).toContain('子女性别必须是 male 或 female');
-      expect(result.errors).toContain('子女出生时间不能为空');
+      expect(result.errors).toContain('子女出生时间（年月日时）必须完整填写');
     });
   });
 });

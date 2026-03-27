@@ -35,15 +35,19 @@ Round 4 (输出): Layer 1 简要版 → Layer 2 详细版 (按需展开)
 | 古诗词专家 | 典籍出处考据 (分级标注) | 文学教授 |
 | 历史学家 | 历史典故分析 | 博学大叔 |
 | 英文语言学专家 | 英文名推荐 + 词源 | 海归精英 |
-| 欧洲历史专家 | 英文名典故来源 | 文化学者 |
 | 汇总员 | 整合所有输出生成方案 | 产品经理 |
+| 快速起名专家 | 快速生成名字方案 (fastMode) | 高效顾问 |
 
 ### 技术选型
 
-- **前端**: Next.js 14+ (Web + 小程序)
+- **前端**: Next.js 15 (static export to `out/`)
 - **部署**: Cloudflare Pages
 - **存储**: Cloudflare R2
-- **Agent 框架**: 待定 (需支持多 Agent 协作)
+- **数据库**: Cloudflare D1 (SQLite)
+- **AI 模型**:
+  - Primary: Gemini API (gemini-2.5-flash, gemini-2.0-flash)
+  - Backup: Zhipu AI API (glm-4-air, glm-4-flash)
+- **LLM Provider 抽象**: 支持多 provider 自动故障切换
 
 ---
 
@@ -160,37 +164,28 @@ Each agent must output:
 # Install dependencies
 npm install
 
-# Build static frontend
-npm run build
-
-# Start local development server (Cloudflare Pages + Functions)
-npm run dev
+# Development
+npm run dev       # Start local dev server (Cloudflare Pages + Functions) at http://localhost:3001
+npm run build     # Build static frontend to out/ directory
 
 # Preview production build locally
-npm run preview
+npm run preview   # Builds + serves production build locally
 
-# Type check Functions only
-npm run check:functions
+# Deploy to Cloudflare Pages
+npm run deploy    # Deploy to production (main branch)
 
-# Type check Next.js only
-npm run check:next
-
-# Run E2E tests with Playwright
-npm test
-
-# Run E2E tests in headed mode (see browser)
-npm run test:headed
-
-# Run E2E tests with UI
-npm run test:ui
+# Testing (Vitest for unit tests, Playwright for E2E)
+npm test          # Run Vitest unit tests (src/**/__tests__/**/*.test.{ts,tsx})
+npm run test:ui   # Run Vitest with UI
+npm run test:headed  # Run Playwright E2E tests with visible browser
+npx playwright test tests/e2e/regression.test.ts  # Run specific E2E test file
 ```
 
 ### Local Development Setup
 
 ```bash
 # 1. Create .env file with your Gemini API Key
-cp .env.example .env
-# Edit .env and add: GEMINI_API_KEY=your_key_here
+# Required env vars: GEMINI_API_KEY, BACKDOOR_INVITE_CODES (optional)
 
 # 2. Initialize local D1 database
 npm run db:migrate
@@ -205,8 +200,79 @@ Access the app at: http://localhost:3001
 ### Architecture
 
 - **Frontend**: Next.js 15 static export (`output: "export"`) to `out/` directory
-- **API**: Cloudflare Pages Functions in `functions/` directory
+- **API**: Cloudflare Pages Functions in `functions/` directory using Hono framework
 - **Development**: `wrangler pages dev out` serves both static assets and Functions
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/generate` | POST | Submit form and create session, returns session ID |
+| `/api/job/:id` | GET | Poll for job status and results |
+| `/api/invite/verify` | POST | Verify invite code validity |
+| `/api/invite/use` | POST | Reserve invite code |
+| `/api/history` | GET | Get user's generation history by device ID |
+| `/api/admin/invite/generate` | POST | Generate new invite codes (requires API_SECRET) |
+| `/api/admin/invite/list` | GET | List all invite codes (requires API_SECRET) |
+
+### Environment Variables
+
+```bash
+# Required (at least one)
+GEMINI_API_KEY=your_gemini_api_key
+ZHIPU_API_KEY=your_zhipu_api_key  # Optional: BigModel.cn (智谱 AI) API key
+
+# LLM Provider Selection
+DEFAULT_LLM_PROVIDER=gemini  # 'gemini' or 'zhipu' (default: gemini)
+
+# Optional
+BACKDOOR_INVITE_CODES=comma,separated,codes  # Backdoor invite codes for testing
+API_SECRET=admin_secret_for_api_protection
+ENABLE_RATE_LIMIT=true  # Enable rate limiting
+RATE_LIMIT_MAX=100  # Max requests per minute per IP/device
+```
+
+### LLM Provider Configuration
+
+The system supports multiple LLM providers with automatic fallback:
+
+1. **Gemini** (Google) - Default provider
+   - Models: `gemini-2.5-flash` (standard), `gemini-2.0-flash` (fast mode)
+   - Requires: `GEMINI_API_KEY`
+
+2. **Zhipu AI** (智谱 AI / BigModel.cn) - Backup provider
+   - Models: `glm-4-air` (standard), `glm-4-flash` (fast mode)
+   - Requires: `ZHIPU_API_KEY`
+   - API Docs: https://docs.bigmodel.cn/
+
+**Provider Failover:**
+- If both API keys are configured, the system automatically falls back to the secondary provider when the primary fails
+- Set `DEFAULT_LLM_PROVIDER` to switch the primary provider
+- The failover is transparent to users
+
+**Provider Implementation:**
+- `src/lib/llm-providers.ts` - Provider abstraction layer with `LLMProviderBase`, `GeminiProvider`, `ZhipuProvider`, and `ProviderManager`
+- `src/lib/agents.ts` - Agent runner with provider manager integration
+- `ProviderManager.generateContentWithFallback()` - Automatic retry with next provider on failure
+
+### Database Schema
+
+**invite_codes** table:
+- `code` (TEXT, PK): 6-char invite code
+- `creator_device_id`, `creator_phone`: Creator info
+- `used_by_device_id`, `used_by_phone`: User info
+- `status`: available | used | expired
+- `is_unlimited`: 1 = unlimited use, never expires
+- `created_at`, `used_at`, `expires_at`: timestamps
+
+**user_sessions** table:
+- `id` (TEXT, PK): Session ID
+- `device_id`, `phone`: User identifiers
+- `input_data` (JSON): Form input
+- `result_data` (JSON): Generation results or processing state
+- `invite_code_used`: Code used for this session
+- `is_premium` (INTEGER): Premium status
+- `created_at`, `updated_at`: timestamps
 
 ### ChildInfo Data Structure
 
@@ -237,12 +303,29 @@ birthTime: `${child.birthYear}-${String(child.birthMonth).padStart(2, '0')}-${St
 
 - `tsconfig.json` - Next.js app (excludes `functions/`)
 - `functions/tsconfig.json` - Cloudflare Pages Functions (includes `@cloudflare/workers-types`)
-
----
+- `vitest.config.ts` - Vitest unit testing config
 
 ## Testing
 
-### E2E Tests (Playwright)
+#### Unit Tests (Vitest)
+
+Located in `src/**/__tests__/**/*.test.{ts,tsx}`. Configuration in `vitest.config.ts`.
+
+```bash
+# Run all unit tests
+npm test
+
+# Run with UI
+npm run test:ui
+
+# Run with coverage
+npm run test:coverage
+
+# Run specific test file
+npx vitest run src/lib/__tests__/utils.test.ts
+```
+
+#### E2E Tests (Playwright)
 
 Located in `tests/e2e/`. Tests cover:
 
@@ -252,27 +335,45 @@ Located in `tests/e2e/`. Tests cover:
 4. **API data format test** - Verifies children data is formatted correctly
 
 ```bash
-# Run all tests
-npm test
+# Run all E2E tests
+npx playwright test
+
+# Run with visible browser
+npm run test:headed
 
 # Run specific test file
 npx playwright test tests/e2e/regression.test.ts
 
-# Run with browser visible
-npm run test:headed
+# Run with UI
+npm run test:ui
 ```
 
-### Test Data Format
+---
 
-Children birth time is formatted as `YYYY-MM-DDTHH:mm` for the API:
+## Code Organization
 
-```typescript
-// Input (store format)
-birthYear: 2024
-birthMonth: 1
-birthDay: 15
-birthHour: '14'
-
-// Output (API format)
-birthTime: '2024-01-15T14:00'
 ```
+├── functions/              # Cloudflare Pages Functions (API)
+│   └── api/[[route]].ts   # Hono-based API entry point
+├── src/
+│   ├── app/               # Next.js app router pages
+│   ├── components/        # React components
+│   ├── lib/               # Shared utilities and agent logic
+│   ├── stores/            # Zustand state stores
+│   ├── types/             # TypeScript type definitions
+│   └── test/              # Vitest test setup
+├── docs/                  # Documentation
+├── tests/e2e/             # Playwright E2E tests
+└── .claude/               # Claude configuration
+```
+
+---
+
+## Test Results
+
+All tests passing as of 2026-03-27:
+
+- **79 Unit Tests** (Vitest) - Testing API client, utils, team orchestration, and React components
+- **4 E2E Tests** (Playwright) - Testing full user flow, validation, children management, and API data format
+
+**Total: 83 tests, 0 failures**

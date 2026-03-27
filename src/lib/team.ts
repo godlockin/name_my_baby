@@ -21,12 +21,15 @@ import {
 } from "../types";
 import {
   runAgent,
+  initializeProviders,
   BAZI_AGENT,
   HOMOPHONE_AGENT,
   POETRY_AGENT,
   HISTORY_AGENT,
   ENGLISH_AGENT,
   AGGREGATOR_AGENT,
+  FAST_NAMING_AGENT,
+  type LLMProvider,
 } from "./agents";
 import { buildConstraints, isPremiumUser } from "./utils";
 
@@ -34,12 +37,18 @@ import { buildConstraints, isPremiumUser } from "./utils";
  * Configuration options for the Agent Team
  */
 export interface AgentTeamOptions {
-  /** Gemini API key for accessing AI models */
-  apiKey: string;
+  /** API key(s) for accessing AI models (supports single key or multiple provider keys) */
+  apiKey: string | {
+    geminiApiKey?: string;
+    zhipuApiKey?: string;
+  };
   /** Optional custom runAgent function for testing (dependency injection) */
   runAgentFn?: typeof runAgent;
   /** Optional flag to run in degraded mode (poetry agent only) */
   degradedMode?: boolean;
+  fastMode?: boolean;
+  /** Preferred LLM provider (default: 'gemini') */
+  defaultProvider?: LLMProvider;
 }
 
 /**
@@ -58,14 +67,40 @@ export interface AgentTeamOptions {
  * ```
  */
 export class AgentTeam {
-  private apiKey: string;
+  private apiKey: string | { geminiApiKey?: string; zhipuApiKey?: string };
   private runAgentFn: typeof runAgent;
   private degradedMode: boolean;
+  private fastMode: boolean;
+  private initialized = false;
+  private primaryApiKey: string;
 
   constructor(options: AgentTeamOptions) {
     this.apiKey = options.apiKey;
     this.runAgentFn = options.runAgentFn || runAgent;
     this.degradedMode = options.degradedMode || false;
+    this.fastMode = options.fastMode || false;
+
+    // Determine primary API key for backward compatibility
+    if (typeof options.apiKey === 'string') {
+      this.primaryApiKey = options.apiKey;
+    } else {
+      this.primaryApiKey = options.apiKey.geminiApiKey || options.apiKey.zhipuApiKey || '';
+    }
+
+    // Initialize providers if not already done
+    if (!this.initialized) {
+      const geminiKey = typeof options.apiKey === 'string' ? options.apiKey : options.apiKey.geminiApiKey;
+      const zhipuKey = typeof options.apiKey === 'object' ? options.apiKey.zhipuApiKey : undefined;
+
+      if (geminiKey || zhipuKey) {
+        initializeProviders({
+          geminiApiKey: geminiKey,
+          zhipuApiKey: zhipuKey,
+          defaultProvider: options.defaultProvider || 'gemini',
+        });
+        this.initialized = true;
+      }
+    }
   }
 
   /**
@@ -81,6 +116,10 @@ export class AgentTeam {
     // If in degraded mode, only run poetry agent and generate simplified results
     if (this.degradedMode) {
       return this.generateDegradedMode(context, userInput);
+    }
+
+    if (this.fastMode) {
+      return this.generateFastMode(context, userInput);
     }
 
     // Update session status at start
@@ -109,21 +148,34 @@ export class AgentTeam {
 
     // Build constraints for Round 2 (only if agents succeeded)
     const constraints = buildConstraints(baziResult, homophoneResult);
+    const isPremium = isPremiumUser(context);
 
     // Round 2: Parallel creative analysis (Poetry + History + English)
     console.log("Round 2: Running parallel creative analysis...");
 
-    const [poetryResult, historyResult, englishResult] = await Promise.all([
-      this.runPoetryAgent(userInput, constraints),
-      this.runHistoryAgent(userInput, constraints),
-      this.runEnglishAgent(userInput, constraints),
-    ]);
+    let poetryResult: AgentOutput<PoetryData>;
+    let historyResult: AgentOutput<HistoryData>;
+    let englishResult: AgentOutput<EnglishData>;
+
+    if (isPremium) {
+      [poetryResult, historyResult, englishResult] = await Promise.all([
+        this.runPoetryAgent(userInput, constraints),
+        this.runHistoryAgent(userInput, constraints),
+        this.runEnglishAgent(userInput, constraints),
+      ]);
+    } else {
+      [poetryResult, historyResult] = await Promise.all([
+        this.runPoetryAgent(userInput, constraints),
+        this.runHistoryAgent(userInput, constraints),
+      ]);
+      englishResult = { status: "failed", data: { candidateNames: [] }, notes: "未启用" };
+    }
 
     // Handle partial failures in Round 2 - continue with available results
     const hasAnyCreativeResult =
       poetryResult.status === "success" ||
       historyResult.status === "success" ||
-      englishResult.status === "success";
+      (isPremium && englishResult.status === "success");
 
     if (!hasAnyCreativeResult) {
       console.warn("All creative agents failed, returning degraded results");
@@ -149,6 +201,47 @@ export class AgentTeam {
     await this.updateSessionStatus(context.sessionId, "completed", "生成完成！");
 
     return finalNames;
+  }
+
+  private async generateFastMode(context: SharedContext, userInput: UserInput): Promise<NameScheme[]> {
+    const isPremium = isPremiumUser(context);
+
+    await this.updateSessionStatus(context.sessionId, "processing", "专家组讨论中，正在生成名字方案...");
+
+    const aggregationContext = JSON.stringify({
+      userInput,
+      isPremium,
+      fastMode: true,
+    });
+
+    const result = await this.runAgentFn<{ nameSchemes: NameScheme[] }>(
+      FAST_NAMING_AGENT,
+      { context: aggregationContext },
+      this.primaryApiKey
+    );
+
+    if (result.status !== "success") {
+      if (isPremium) {
+        throw new Error(result.notes || "Aggregation agent failed");
+      }
+      return this.generateFullDegradedResults(context, userInput);
+    }
+
+    let schemes = result.data.nameSchemes || [];
+
+    if (!isPremium) {
+      schemes = schemes.slice(0, 2).map((scheme) => {
+        const { englishName: _englishName, ...rest } = scheme;
+        return {
+          ...rest,
+          isPremium: false,
+        };
+      });
+    }
+
+    await this.updateSessionStatus(context.sessionId, "completed", "生成完成！");
+
+    return schemes;
   }
 
   /**
@@ -251,47 +344,43 @@ export class AgentTeam {
   /**
    * Runs the Bazi (Eight Characters) analysis agent
    */
-  private async runBaziAgent(input: UserInput): Promise<AgentOutput<BaziData>> {
+  private runBaziAgent(input: UserInput): Promise<AgentOutput<BaziData>> {
     const context = this.formatInputContext(input);
     console.log("[BaziAgent] Starting agent run with context:", context.substring(0, 100));
-    const result = await this.runAgentFn<BaziData>(BAZI_AGENT, { context }, this.apiKey);
-    console.log("[BaziAgent] Agent returned:", result.status);
-    return result;
+    return this.runAgentFn<BaziData>(BAZI_AGENT, { context }, this.primaryApiKey);
   }
 
   /**
    * Runs the homophone analysis agent
    */
-  private async runHomophoneAgent(input: UserInput): Promise<AgentOutput<HomophoneData>> {
+  private runHomophoneAgent(input: UserInput): Promise<AgentOutput<HomophoneData>> {
     const context = this.formatInputContext(input);
     console.log("[HomophoneAgent] Starting agent run");
-    const result = await this.runAgentFn<HomophoneData>(HOMOPHONE_AGENT, { context }, this.apiKey);
-    console.log("[HomophoneAgent] Agent returned:", result.status);
-    return result;
+    return this.runAgentFn<HomophoneData>(HOMOPHONE_AGENT, { context }, this.primaryApiKey);
   }
 
   /**
    * Runs the poetry analysis agent with constraints
    */
-  private async runPoetryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<PoetryData>> {
+  private runPoetryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<PoetryData>> {
     const context = this.formatInputContext(input);
-    return this.runAgentFn<PoetryData>(POETRY_AGENT, { context, constraints }, this.apiKey);
+    return this.runAgentFn<PoetryData>(POETRY_AGENT, { context, constraints }, this.primaryApiKey);
   }
 
   /**
    * Runs the history analysis agent with constraints
    */
-  private async runHistoryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<HistoryData>> {
+  private runHistoryAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<HistoryData>> {
     const context = this.formatInputContext(input);
-    return this.runAgentFn<HistoryData>(HISTORY_AGENT, { context, constraints }, this.apiKey);
+    return this.runAgentFn<HistoryData>(HISTORY_AGENT, { context, constraints }, this.primaryApiKey);
   }
 
   /**
    * Runs the English naming agent with constraints
    */
-  private async runEnglishAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<EnglishData>> {
+  private runEnglishAgent(input: UserInput, constraints: Constraints): Promise<AgentOutput<EnglishData>> {
     const context = this.formatInputContext(input);
-    return this.runAgentFn<EnglishData>(ENGLISH_AGENT, { context, constraints }, this.apiKey);
+    return this.runAgentFn<EnglishData>(ENGLISH_AGENT, { context, constraints }, this.primaryApiKey);
   }
 
   /**
@@ -324,7 +413,7 @@ export class AgentTeam {
     const result = await this.runAgentFn<{ nameSchemes: NameScheme[] }>(
       AGGREGATOR_AGENT,
       { context: aggregationContext },
-      this.apiKey
+      this.primaryApiKey
     );
 
     if (result.status !== "success") {
@@ -335,12 +424,13 @@ export class AgentTeam {
     let schemes = result.data.nameSchemes || [];
 
     if (!isPremium) {
-      // Free users get only 2 basic schemes (but still get English names)
-      schemes = schemes.slice(0, 2).map((scheme) => ({
-        ...scheme,
-        isPremium: false,
-        // Keep englishName for all users now
-      }));
+      schemes = schemes.slice(0, 2).map((scheme) => {
+        const { englishName: _englishName, ...rest } = scheme;
+        return {
+          ...rest,
+          isPremium: false,
+        };
+      });
     }
 
     return schemes;
@@ -370,7 +460,7 @@ export class AgentTeam {
     const result = await this.runAgentFn<{ nameSchemes: NameScheme[] }>(
       AGGREGATOR_AGENT,
       { context: aggregationContext },
-      this.apiKey
+      this.primaryApiKey
     );
 
     if (result.status !== "success") {

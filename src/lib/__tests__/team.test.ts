@@ -23,7 +23,7 @@ describe('AgentTeam', () => {
   const TEST_USER_INPUT: UserInput = {
     fatherName: '张伟',
     motherName: '李娜',
-    children: [{ id: '1', gender: 'male', birthTime: '2024-01-01T00:00:00Z' }],
+    children: [{ id: '1', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
   };
 
   const createContext = (inviteCode?: string): SharedContext => ({

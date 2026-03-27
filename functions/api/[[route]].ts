@@ -15,7 +15,7 @@ import { cors } from "hono/cors";
 import { AgentTeam } from "../../src/lib/team";
 import { generateInviteCode, generateSessionId, validateInput } from "../../src/lib/utils";
 import { UserInput, InviteCodeRecord, UserSessionRecord, ApiError } from "../../src/types";
-import type { PagesFunctionHandler } from "@cloudflare/workers-types";
+import type { PagesFunction } from "@cloudflare/workers-types";
 
 /**
  * Environment bindings for Cloudflare Pages Functions
@@ -27,6 +27,8 @@ interface Env {
   BUCKET: R2Bucket;
   /** Gemini API Key */
   GEMINI_API_KEY: string;
+  /** Optional: Zhipu AI (BigModel.cn) API Key */
+  ZHIPU_API_KEY?: string;
   /** Optional: Admin API key for protected routes */
   API_SECRET?: string;
   /** Optional: Backdoor invite codes (comma-separated) */
@@ -35,6 +37,8 @@ interface Env {
   ENABLE_RATE_LIMIT?: string;
   /** Rate limit: requests per minute per IP */
   RATE_LIMIT_MAX?: string;
+  /** Optional: Default LLM provider ('gemini' or 'zhipu') */
+  DEFAULT_LLM_PROVIDER?: string;
 }
 
 /**
@@ -77,7 +81,7 @@ function checkRateLimit(key: string, maxRequests: number = 100, windowMs: number
  * Structured logger for consistent log format
  */
 const logger = {
-  info: (ctx: { requestId?: string; route?: string; deviceId?: string }, message: string, data?: Record<string, unknown>) => {
+  info: (ctx: { requestId?: string; route?: string; deviceId?: string; sessionId?: string }, message: string, data?: Record<string, unknown>) => {
     console.log(JSON.stringify({
       level: "INFO",
       timestamp: new Date().toISOString(),
@@ -87,7 +91,7 @@ const logger = {
       ...data
     }));
   },
-  error: (ctx: { requestId?: string; route?: string; deviceId?: string }, message: string, error: unknown, data?: Record<string, unknown>) => {
+  error: (ctx: { requestId?: string; route?: string; deviceId?: string; sessionId?: string }, message: string, error: unknown, data?: Record<string, unknown>) => {
     const errorData = error instanceof Error
       ? { name: error.name, message: error.message, stack: error.stack }
       : { raw: error };
@@ -102,7 +106,7 @@ const logger = {
       ...data
     }));
   },
-  warn: (ctx: { requestId?: string; route?: string; deviceId?: string }, message: string, data?: Record<string, unknown>) => {
+  warn: (ctx: { requestId?: string; route?: string; deviceId?: string; sessionId?: string }, message: string, data?: Record<string, unknown>) => {
     console.warn(JSON.stringify({
       level: "WARN",
       timestamp: new Date().toISOString(),
@@ -132,7 +136,248 @@ function safeJsonParse<T>(input: string, fallback: T): T {
   }
 }
 
-const app = new Hono<{ Bindings: Env }>();
+function parseBackdoorInviteCodes(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((v) => v.trim().toUpperCase())
+    .filter(Boolean);
+}
+
+function getBackdoorInviteCodes(env: Env): string[] {
+  const fromBindings = parseBackdoorInviteCodes(env.BACKDOOR_INVITE_CODES);
+  if (fromBindings.length > 0) return fromBindings;
+  const processValue =
+    typeof globalThis !== "undefined"
+      ? (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process?.env?.BACKDOOR_INVITE_CODES
+      : undefined;
+  const fromProcess = parseBackdoorInviteCodes(processValue);
+  return fromProcess;
+}
+
+const MAX_GENERATION_ATTEMPTS = 3;
+const GENERATION_MAX_TOTAL_MS = 10 * 60 * 1000;
+
+type ProcessingState = {
+  status: "processing";
+  attemptCount?: number;
+  lastAttemptAt?: number;
+  nextRetryAt?: number;
+  leaseUntil?: number;
+  lastError?: string;
+};
+
+function parseProcessingState(value: string | null): ProcessingState | null {
+  if (!value) return null;
+  const parsed = safeJsonParse<unknown>(value, null);
+  if (!parsed || typeof parsed !== "object") return null;
+  if (!("status" in parsed) || parsed.status !== "processing") return null;
+  return parsed as ProcessingState;
+}
+
+function computeBackoffMs(attempt: number): number {
+  if (attempt <= 1) return 0;
+  if (attempt === 2) return 10_000;
+  if (attempt === 3) return 30_000;
+  return 60_000;
+}
+
+async function runGenerationAttempt(params: {
+  env: Env;
+  sessionId: string;
+  requestId: string;
+}): Promise<void> {
+  const { env, sessionId, requestId } = params;
+  const db = env.DB;
+
+  // Support both single API key and multi-provider configuration
+  const apiKeys = {
+    geminiApiKey: env.GEMINI_API_KEY,
+    zhipuApiKey: env.ZHIPU_API_KEY,
+  };
+  const defaultProvider = (env.DEFAULT_LLM_PROVIDER as 'gemini' | 'zhipu' | undefined) || 'gemini';
+
+  const row = await db.prepare(
+    "SELECT input_data, invite_code_used, is_premium, device_id, phone, result_data, created_at FROM user_sessions WHERE id = ?"
+  )
+    .bind(sessionId)
+    .first<{
+      input_data: string | null;
+      invite_code_used: string | null;
+      is_premium: number;
+      device_id: string | null;
+      phone: string | null;
+      result_data: string | null;
+      created_at: number;
+    }>();
+
+  if (!row) return;
+
+  const now = Date.now();
+  if (typeof row.created_at === "number" && now - row.created_at > GENERATION_MAX_TOTAL_MS) {
+    await db.prepare(
+      `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(
+        JSON.stringify({ error: "Generation timeout", status: "failed" }),
+        now,
+        sessionId
+      )
+      .run();
+    return;
+  }
+
+  const existingState = parseProcessingState(row.result_data);
+  const attemptCount = typeof existingState?.attemptCount === "number" ? existingState.attemptCount : 0;
+
+  if (attemptCount >= MAX_GENERATION_ATTEMPTS) {
+    await db.prepare(
+      `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(
+        JSON.stringify({ error: existingState?.lastError || "Generation failed", status: "failed" }),
+        now,
+        sessionId
+      )
+      .run();
+    return;
+  }
+
+  const nextAttempt = attemptCount + 1;
+  const nextRetryAt = now + computeBackoffMs(nextAttempt);
+
+  await db.prepare(
+    `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+  )
+    .bind(
+      JSON.stringify({
+        status: "processing",
+        attemptCount: nextAttempt,
+        lastAttemptAt: now,
+        nextRetryAt,
+        leaseUntil: 0,
+      } satisfies ProcessingState),
+      now,
+      sessionId
+    )
+    .run();
+
+  const input = row.input_data ? safeJsonParse<UserInput>(row.input_data, null as unknown as UserInput) : null;
+  if (!input) {
+    await db.prepare(
+      `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(
+        JSON.stringify({ error: "Invalid input data", status: "failed" }),
+        Date.now(),
+        sessionId
+      )
+      .run();
+    return;
+  }
+
+  const inviteCode = (row.invite_code_used || input.inviteCode || "").toUpperCase().trim();
+  const backdoorCodes = getBackdoorInviteCodes(env);
+  const isBackdoorCodeUsed = inviteCode ? backdoorCodes.includes(inviteCode) : false;
+
+  let degradedMode = false;
+  if (inviteCode && !isBackdoorCodeUsed) {
+    const inviteValid = await verifyInviteCode(db, inviteCode);
+    if (!inviteValid.valid) degradedMode = true;
+  }
+
+  try {
+    const agentTeam = new AgentTeam({
+      apiKey: apiKeys,
+      degradedMode,
+      fastMode: true,
+      defaultProvider,
+    });
+    const agentContext = {
+      sessionId,
+      userInput: input,
+    };
+
+    logger.info({ requestId, sessionId }, "Starting agent team generation");
+    const names = await Promise.race([
+      agentTeam.generate(agentContext),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Upstream generation timeout")), 60_000)
+      ),
+    ]);
+
+    if (!names || names.length === 0) {
+      throw new Error("No names generated by agent team");
+    }
+
+    await db.prepare(
+      `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(
+        JSON.stringify(names),
+        Date.now(),
+        sessionId
+      )
+      .run();
+
+    logger.info({ requestId, sessionId }, "Session updated with results");
+
+    if (inviteCode && !isBackdoorCodeUsed) {
+      const inviteInfo = await db.prepare(
+        "SELECT is_unlimited FROM invite_codes WHERE code = ?"
+      )
+        .bind(inviteCode)
+        .first<{ is_unlimited: number }>();
+
+      if (inviteInfo && inviteInfo.is_unlimited !== 1) {
+        await db.prepare(
+          `UPDATE invite_codes SET status = 'used', used_by_device_id = ?, used_by_phone = ?, used_at = ?
+           WHERE code = ?`
+        )
+          .bind(row.device_id || "unknown", row.phone || null, Date.now(), inviteCode)
+          .run();
+      }
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown generation error";
+    logger.error({ requestId, sessionId }, "Generation attempt failed", error);
+
+    const finalAttemptCount = nextAttempt;
+    const retryAt = Date.now() + computeBackoffMs(finalAttemptCount + 1);
+
+    if (finalAttemptCount >= MAX_GENERATION_ATTEMPTS) {
+      await db.prepare(
+        `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+      )
+        .bind(
+          JSON.stringify({ error: errorMessage, status: "failed" }),
+          Date.now(),
+          sessionId
+        )
+        .run();
+      return;
+    }
+
+    await db.prepare(
+      `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+    )
+      .bind(
+        JSON.stringify({
+          status: "processing",
+          attemptCount: finalAttemptCount,
+          lastAttemptAt: now,
+          nextRetryAt: retryAt,
+          leaseUntil: 0,
+          lastError: errorMessage,
+        } satisfies ProcessingState),
+        Date.now(),
+        sessionId
+      )
+      .run();
+  }
+}
+
+const app = new Hono<{ Bindings: Env; Variables: { requestId: string } }>();
 
 // ============================================================================
 // Global Middleware
@@ -143,7 +388,7 @@ const app = new Hono<{ Bindings: Env }>();
  */
 app.use("/*", async (c, next) => {
   const requestId = generateRequestId();
-  c.set("requestId", requestId as never);
+  c.set("requestId", requestId);
 
   const startTime = Date.now();
   const method = c.req.method;
@@ -201,7 +446,7 @@ app.use("/api/*", async (c, next) => {
  * @returns {GenerateResponse} - Session ID and initial status
  */
 app.post("/generate", async (c) => {
-  const requestId = (c.get("requestId") as string) || generateRequestId();
+  const requestId = c.get("requestId") || generateRequestId();
 
   try {
     const body = await c.req.json();
@@ -230,19 +475,17 @@ app.post("/generate", async (c) => {
     // Check invite code if provided
     let isPremium = false;
     let inviteCodeWarning: string | undefined;
+    let isBackdoorCodeUsed = false;
 
     if (input.inviteCode) {
-      // First check if it's a backdoor invite code from environment variable
-      const backdoorCodesEnv = c.env.BACKDOOR_INVITE_CODES;
-      console.log(`[InviteCode] BACKDOOR_INVITE_CODES env: ${backdoorCodesEnv ? "present" : "NOT SET"}`);
-      const backdoorCodes = backdoorCodesEnv?.split(",").map(c => c.trim().toUpperCase()) || [];
       const normalizedCode = input.inviteCode.toUpperCase().trim();
+      const backdoorCodes = getBackdoorInviteCodes(c.env);
 
-      console.log(`[InviteCode] Checking code: ${normalizedCode}, Backdoor codes: ${JSON.stringify(backdoorCodes)}`);
-      const isBackdoorCode = backdoorCodes.includes(normalizedCode);
-      console.log(`[InviteCode] Is backdoor code: ${isBackdoorCode}`);
-
-      if (!isBackdoorCode) {
+      if (backdoorCodes.includes(normalizedCode)) {
+        isPremium = true;
+        isBackdoorCodeUsed = true;
+        logger.info({ requestId, route: "/api/generate" }, "Backdoor invite code used");
+      } else {
         // Check database for regular invite codes
         const inviteValid = await verifyInviteCode(c.env.DB, normalizedCode);
         if (!inviteValid.valid) {
@@ -255,12 +498,6 @@ app.post("/generate", async (c) => {
         } else {
           isPremium = true;
         }
-      } else {
-        // Backdoor code is always valid and premium
-        isPremium = true;
-        logger.info({ requestId, route: "/api/generate" }, "Backdoor invite code used", {
-          code: normalizedCode
-        });
       }
     }
 
@@ -289,107 +526,31 @@ app.post("/generate", async (c) => {
 
     logger.info({ requestId, sessionId }, "Session record created (processing state)");
 
-    // Run agent team synchronously and wait for completion
-    // Note: This may take up to 60 seconds for Gemini API calls
-    console.log(`[Generation:${sessionId}] Starting agent team with API key: ${c.env.GEMINI_API_KEY ? "present" : "MISSING!"}`);
-
-    // Use degraded mode if invite code was invalid (warning was set)
-    // In degraded mode, only poetry agent runs for faster results
-    const agentTeam = new AgentTeam({
-      apiKey: c.env.GEMINI_API_KEY,
-      degradedMode: !!inviteCodeWarning, // Run in degraded mode if invite code was invalid
-    });
-    const agentContext = {
-      sessionId,
-      userInput: input,
-    };
-
-    try {
-      logger.info({ requestId, sessionId }, "Starting agent team generation (synchronous mode)");
-      const names = await agentTeam.generate(agentContext);
-      console.log(`[Generation:${sessionId}] Agent team completed successfully, generated ${names.length} names`);
-
-      // Validate generated names
-      if (!names || names.length === 0) {
-        throw new Error("No names generated by agent team");
-      }
-
-      // Update session with results
-      await c.env.DB.prepare(
-        `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
-      )
-        .bind(
-          JSON.stringify(names),
-          Date.now(),
-          sessionId
-        )
-        .run();
-
-      logger.info({ requestId, sessionId }, "Session updated with results");
-
-      // Mark invite code as used (only if not unlimited)
-      if (input.inviteCode) {
-        // First check if the code is unlimited
-        const inviteInfo = await c.env.DB.prepare(
-          "SELECT is_unlimited FROM invite_codes WHERE code = ?"
-        )
-          .bind(input.inviteCode)
-          .first<{ is_unlimited: number }>();
-
-        // Only mark as used if it's NOT an unlimited code
-        if (inviteInfo && inviteInfo.is_unlimited !== 1) {
-          await c.env.DB.prepare(
-            `UPDATE invite_codes SET status = 'used', used_by_device_id = ?, used_by_phone = ?, used_at = ?
-             WHERE code = ?`
-          )
-            .bind(deviceId || "unknown", input.phone || null, Date.now(), input.inviteCode)
-            .run();
-
-          logger.info({ requestId, sessionId }, "Invite code marked as used", {
-            code: input.inviteCode
-          });
-        } else {
-          logger.info({ requestId, sessionId }, "Unlimited invite code used (not marked as used)", {
-            code: input.inviteCode
-          });
-        }
-      }
-
-      // Return success response with names
+    const executionCtx = (c as unknown as { executionCtx?: ExecutionContext }).executionCtx;
+    if (executionCtx && typeof executionCtx.waitUntil === "function") {
+      executionCtx.waitUntil(runGenerationAttempt({ env: c.env, sessionId, requestId }));
       return c.json({
         sessionId,
-        status: "completed",
-        names,
+        status: "processing",
         isPremium
       });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown generation error";
-      logger.error({ requestId, sessionId }, "Generation failed", error);
-      console.error(`[Generation:${sessionId}] Failed:`, errorMessage);
-
-      // Update session with failure status
-      try {
-        await c.env.DB.prepare(
-          `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
-        )
-          .bind(
-            JSON.stringify({ error: errorMessage, status: "failed" }),
-            Date.now(),
-            sessionId
-          )
-          .run();
-
-        logger.info({ requestId, sessionId }, "Session updated with failure status");
-      } catch (dbError) {
-        logger.error({ requestId, sessionId }, "Failed to update session with failure", dbError);
-      }
-
-      return c.json({
-        sessionId,
-        status: "failed",
-        error: errorMessage
-      });
     }
+
+    await runGenerationAttempt({ env: c.env, sessionId, requestId });
+    const result = await c.env.DB.prepare(
+      "SELECT result_data FROM user_sessions WHERE id = ?"
+    )
+      .bind(sessionId)
+      .first<{ result_data: string | null }>();
+
+    const parsed = safeJsonParse<unknown>(result?.result_data || "", null);
+    if (Array.isArray(parsed)) {
+      return c.json({ sessionId, status: "completed", names: parsed, isPremium });
+    }
+    if (parsed && typeof parsed === "object" && "status" in parsed && parsed.status === "failed") {
+      return c.json({ sessionId, status: "failed", error: (parsed as Record<string, unknown>)?.error || "Generation failed", isPremium });
+    }
+    return c.json({ sessionId, status: "processing", isPremium });
   } catch (error) {
     logger.error({ requestId }, "Generate endpoint error", error);
     return c.json<ApiError>({
@@ -409,7 +570,7 @@ app.post("/generate", async (c) => {
  * @returns {JobStatusResponse} - Job status and results if completed
  */
 app.get("/job/:id", async (c) => {
-  const requestId = (c.get("requestId") as string) || generateRequestId();
+  const requestId = c.get("requestId") || generateRequestId();
 
   try {
     const sessionId = c.req.param("id");
@@ -432,10 +593,10 @@ app.get("/job/:id", async (c) => {
     }
 
     const result = await c.env.DB.prepare(
-      "SELECT result_data, is_premium FROM user_sessions WHERE id = ?"
+      "SELECT result_data, is_premium, updated_at, created_at FROM user_sessions WHERE id = ?"
     )
       .bind(sessionId)
-      .first<{ result_data: string | null; is_premium: number }>();
+      .first<{ result_data: string | null; is_premium: number; updated_at: number; created_at: number }>();
 
     if (!result) {
       logger.info({ requestId, sessionId }, "Session not found");
@@ -482,6 +643,46 @@ app.get("/job/:id", async (c) => {
     }
 
     if (isProcessing) {
+      const state = parseProcessingState(result.result_data);
+      const now = Date.now();
+      if (typeof result.created_at === "number" && now - result.created_at > GENERATION_MAX_TOTAL_MS) {
+        const errorMessage = "Generation timeout";
+        await c.env.DB.prepare(
+          `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+        )
+          .bind(
+            JSON.stringify({ error: errorMessage, status: "failed" }),
+            now,
+            sessionId
+          )
+          .run();
+        return c.json({ sessionId, status: "failed", error: errorMessage });
+      }
+
+      const attemptCount = typeof state?.attemptCount === "number" ? state.attemptCount : 0;
+      const nextRetryAt = typeof state?.nextRetryAt === "number" ? state.nextRetryAt : 0;
+      const leaseUntil = typeof state?.leaseUntil === "number" ? state.leaseUntil : 0;
+      if (attemptCount < MAX_GENERATION_ATTEMPTS && now >= nextRetryAt && now >= leaseUntil) {
+        const leasedState: ProcessingState = {
+          status: "processing",
+          attemptCount,
+          lastAttemptAt: state?.lastAttemptAt,
+          nextRetryAt,
+          leaseUntil: now + 30_000,
+          lastError: state?.lastError,
+        };
+        await c.env.DB.prepare(
+          `UPDATE user_sessions SET result_data = ?, updated_at = ? WHERE id = ?`
+        )
+          .bind(JSON.stringify(leasedState), now, sessionId)
+          .run();
+
+        const executionCtx = (c as unknown as { executionCtx?: ExecutionContext }).executionCtx;
+        if (executionCtx && typeof executionCtx.waitUntil === "function") {
+          executionCtx.waitUntil(runGenerationAttempt({ env: c.env, sessionId, requestId }));
+        }
+      }
+
       return c.json({
         sessionId,
         status: "processing"
@@ -524,7 +725,7 @@ app.get("/job/:id", async (c) => {
  * @returns {InviteVerifyResponse} - Validation result
  */
 app.post("/invite/verify", async (c) => {
-  const requestId = (c.get("requestId") as string) || generateRequestId();
+  const requestId = c.get("requestId") || generateRequestId();
 
   try {
     const body = await c.req.json();
@@ -538,6 +739,10 @@ app.post("/invite/verify", async (c) => {
     }
 
     const normalizedCode = code.toUpperCase().trim();
+    const backdoorCodes = getBackdoorInviteCodes(c.env);
+    if (backdoorCodes.includes(normalizedCode)) {
+      return c.json({ valid: true });
+    }
     const result = await verifyInviteCode(c.env.DB, normalizedCode);
 
     logger.info({ requestId }, "Invite code verification", {
@@ -567,7 +772,7 @@ app.post("/invite/verify", async (c) => {
  * @returns {InviteUseResponse} - Reservation confirmation
  */
 app.post("/invite/use", async (c) => {
-  const requestId = (c.get("requestId") as string) || generateRequestId();
+  const requestId = c.get("requestId") || generateRequestId();
 
   try {
     const body = await c.req.json();
@@ -592,6 +797,10 @@ app.post("/invite/use", async (c) => {
     }
 
     const normalizedCode = code.toUpperCase().trim();
+    const backdoorCodes = getBackdoorInviteCodes(c.env);
+    if (backdoorCodes.includes(normalizedCode)) {
+      return c.json({ valid: true, message: "邀请码验证通过" });
+    }
 
     // Check if code exists
     const existing = await c.env.DB.prepare(
@@ -638,7 +847,7 @@ app.post("/invite/use", async (c) => {
  * @returns {HistoryResponse} - List of user sessions
  */
 app.get("/history", async (c) => {
-  const requestId = (c.get("requestId") as string) || generateRequestId();
+  const requestId = c.get("requestId") || generateRequestId();
 
   try {
     const deviceId = c.req.query("deviceId");
@@ -878,7 +1087,7 @@ async function verifyInviteCode(
 
 // Export handler for Cloudflare Pages Functions
 // Hono's app.fetch works directly with Request/Response
-export const onRequest: PagesFunctionHandler<Env> = async (context) => {
+export const onRequest: PagesFunction<Env> = async (context) => {
   const url = new URL(context.request.url);
 
   // Strip /api prefix for Hono routing
@@ -890,12 +1099,13 @@ export const onRequest: PagesFunctionHandler<Env> = async (context) => {
     method: context.request.method,
     headers: context.request.headers,
     body: context.request.body,
-    duplex: 'half',
   });
 
   // Pass env and execution context to Hono
-  return app.fetch(modifiedRequest, context.env, {
+  const executionCtx = {
     waitUntil: (promise: Promise<unknown>) => context.waitUntil(promise),
     passThroughOnException: () => context.passThroughOnException(),
-  });
+    props: {},
+  };
+  return app.fetch(modifiedRequest, context.env, executionCtx as unknown as ExecutionContext);
 };

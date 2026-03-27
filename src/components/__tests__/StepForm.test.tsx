@@ -25,7 +25,7 @@ describe('StepForm', () => {
     // Form data
     fatherName: '',
     motherName: '',
-    children: [{ id: '1', gender: 'male', birthTime: '' }],
+    children: [{ id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
     generationChar: '',
     stylePreference: '',
     specialRequests: '',
@@ -192,12 +192,12 @@ describe('StepForm', () => {
       mockUseWorkflowStore.mockReturnValue({
         ...mockStore,
         currentStep: 'children',
-        children: [{ id: '1', gender: 'male', birthTime: '' }],
+        children: [{ id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
       });
       mockUseWorkflowStore.getState = vi.fn().mockReturnValue({
         ...mockStore,
         currentStep: 'children',
-        children: [{ id: '1', gender: 'male', birthTime: '' }],
+        children: [{ id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' }],
       });
     });
 
@@ -206,33 +206,32 @@ describe('StepForm', () => {
       expect(screen.getByText('孩子 1')).toBeInTheDocument();
     });
 
-    it('should render gender dropdown', () => {
+    it('should render gender inputs', () => {
       render(<StepForm />);
-      const genderSelect = screen.getByRole('combobox');
-      expect(genderSelect).toBeInTheDocument();
+      expect(screen.getByLabelText('男')).toBeInTheDocument();
+      expect(screen.getByLabelText('女')).toBeInTheDocument();
     });
 
-    it('should render birth time input', () => {
+    it('should render birth time selects', () => {
       render(<StepForm />);
-      // The datetime-local input doesn't have an accessible role, search by placeholder/text
-      const birthTimeInput = screen.getByDisplayValue('');
-      expect(birthTimeInput).toHaveAttribute('type', 'datetime-local');
+      expect(screen.getByLabelText('出生年份')).toBeInTheDocument();
+      expect(screen.getByLabelText('出生月份')).toBeInTheDocument();
+      expect(screen.getByLabelText('出生日期')).toBeInTheDocument();
+      expect(screen.getByLabelText('出生时辰')).toBeInTheDocument();
     });
 
     it('should call updateChild when gender changes', async () => {
       render(<StepForm />);
-      const genderSelect = screen.getByRole('combobox');
-      fireEvent.change(genderSelect, { target: { value: 'female' } });
+      const femaleRadio = screen.getByLabelText('女');
+      fireEvent.click(femaleRadio);
       expect(mockStore.updateChild).toHaveBeenCalledWith('1', expect.objectContaining({ gender: 'female' }));
     });
 
     it('should call updateChild when birth time changes', async () => {
       render(<StepForm />);
-      // Get the input by its value attribute
-      const birthTimeInput = screen.getByDisplayValue('');
-      expect(birthTimeInput).toBeInTheDocument();
-      fireEvent.change(birthTimeInput, { target: { value: '2024-01-01T10:00' } });
-      expect(mockStore.updateChild).toHaveBeenCalledWith('1', expect.objectContaining({ birthTime: '2024-01-01T10:00' }));
+      const monthSelect = screen.getByLabelText('出生月份');
+      fireEvent.change(monthSelect, { target: { value: '6' } });
+      expect(mockStore.updateChild).toHaveBeenCalledWith('1', expect.objectContaining({ birthMonth: 6 }));
     });
 
     it('should call addChild when add button is clicked', async () => {
@@ -247,16 +246,16 @@ describe('StepForm', () => {
         ...mockStore,
         currentStep: 'children',
         children: [
-          { id: '1', gender: 'male', birthTime: '' },
-          { id: '2', gender: 'female', birthTime: '' },
+          { id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
+          { id: '2', name: '', gender: 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
         ],
       });
       mockUseWorkflowStore.getState = vi.fn().mockReturnValue({
         ...mockStore,
         currentStep: 'children',
         children: [
-          { id: '1', gender: 'male', birthTime: '' },
-          { id: '2', gender: 'female', birthTime: '' },
+          { id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
+          { id: '2', name: '', gender: 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
         ],
       });
       render(<StepForm />);
@@ -268,16 +267,16 @@ describe('StepForm', () => {
         ...mockStore,
         currentStep: 'children',
         children: [
-          { id: '1', gender: 'male', birthTime: '' },
-          { id: '2', gender: 'female', birthTime: '' },
+          { id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
+          { id: '2', name: '', gender: 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
         ],
       });
       mockUseWorkflowStore.getState = vi.fn().mockReturnValue({
         ...mockStore,
         currentStep: 'children',
         children: [
-          { id: '1', gender: 'male', birthTime: '' },
-          { id: '2', gender: 'female', birthTime: '' },
+          { id: '1', name: '', gender: 'male', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
+          { id: '2', name: '', gender: 'female', birthYear: 2024, birthMonth: 1, birthDay: 1, birthHour: '00' },
         ],
       });
       render(<StepForm />);

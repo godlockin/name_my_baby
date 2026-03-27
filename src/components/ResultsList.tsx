@@ -299,7 +299,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 nameScheme={selectedName}
                 fatherName={fatherName}
                 motherName={motherName}
-                children={children}
+                childrenInfo={children}
               />
             </div>
           </div>

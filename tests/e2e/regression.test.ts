@@ -220,11 +220,12 @@ test.describe('Baby Naming - Complete Flow Regression Test', () => {
       // Verify response structure
       expect(responseData).toHaveProperty('sessionId');
       expect(responseData.status).toBe('processing');
-      expect(responseData.estimatedTime).toBeDefined();
+      expect(responseData.isPremium).toBeDefined();
 
       console.log('✓ Form submitted successfully');
       console.log('✓ Session ID:', responseData.sessionId);
       console.log('✓ Status:', responseData.status);
+      console.log('✓ Is Premium:', responseData.isPremium);
     });
   });
 
@@ -350,21 +351,22 @@ test.describe('Baby Naming - Complete Flow Regression Test', () => {
     // Intercept the request to verify data format
     let requestBody: any = null;
 
-    page.on('request', (request) => {
-      if (request.url().includes('/api/generate')) {
-        try {
-          requestBody = JSON.parse(request.postData() || '{}');
-        } catch (e) {
-          console.error('Failed to parse request body:', e);
-        }
+    // Set up request interception BEFORE clicking submit
+    await page.route('**/api/generate', async (route) => {
+      const postData = route.request().postData();
+      try {
+        requestBody = JSON.parse(postData || '{}');
+      } catch (e) {
+        console.error('Failed to parse request body:', e);
       }
+      await route.continue();
     });
 
-    // Click submit (will fail with invalid invite code, but that's ok)
+    // Click submit
     await page.getByRole('button', { name: '开始起名' }).click();
 
-    // Wait for request to complete
-    await page.waitForResponse((res) => res.url().includes('/api/generate'));
+    // Wait for response with shorter timeout since we just need the request
+    await page.waitForResponse((res) => res.url().includes('/api/generate'), { timeout: 10000 });
     await page.waitForTimeout(500);
 
     // Verify request body structure

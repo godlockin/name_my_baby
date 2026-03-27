@@ -5,6 +5,12 @@ import { useState, useEffect } from "react";
 import { generateName, getJobStatus } from "../lib/api";
 import { StepForm, GeneratingPage, ResultsList } from "../components";
 
+type DebugWindow = Window & {
+  __handleSubmitCalled?: boolean;
+  __handleSubmitCalledAt?: string;
+  __handleSubmitCurrentStep?: unknown;
+};
+
 export default function Home() {
   const {
     fatherName, motherName, children, generationChar, stylePreference,
@@ -46,9 +52,10 @@ export default function Home() {
   const handleSubmit = async () => {
     console.log('[page.tsx] handleSubmit called, generationStatus:', generationStatus, 'currentStep:', currentStep);
     // Debug: Set a window flag to track if handleSubmit was called
-    (window as any).__handleSubmitCalled = true;
-    (window as any).__handleSubmitCalledAt = new Date().toISOString();
-    (window as any).__handleSubmitCurrentStep = currentStep;
+    const debugWindow = window as DebugWindow;
+    debugWindow.__handleSubmitCalled = true;
+    debugWindow.__handleSubmitCalledAt = new Date().toISOString();
+    debugWindow.__handleSubmitCurrentStep = currentStep;
     startGeneration();
 
     try {

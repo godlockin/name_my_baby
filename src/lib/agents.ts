@@ -1,13 +1,101 @@
 /**
- * Base Agent module for running AI agents via Gemini API
+ * Base Agent module for running AI agents via LLM providers
  *
  * Provides a generic agent runner that executes prompts with structured JSON output.
+ * Supports multiple LLM providers (Gemini, Zhipu AI) with automatic fallback.
  * Each agent has a specific persona and system prompt for its domain expertise.
  *
  * @module agents
  */
 
-import { AgentOutput, Constraints, BaziData, HomophoneData, PoetryData, HistoryData } from "../types";
+import { AgentOutput, Constraints } from "../types";
+import { ProviderManager, GeminiProvider, ZhipuProvider, type LLMProvider } from "./llm-providers";
+
+// Re-export LLMProvider type for use by consumers
+export type { LLMProvider };
+
+const NAME_SCHEMES_RESPONSE_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["nameSchemes", "summary"],
+  properties: {
+    nameSchemes: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "chineseName",
+          "coreMeaning",
+          "baziAnalysis",
+          "homophoneCheck",
+          "poetryReference",
+          "historyReference",
+          "englishEtymology",
+        ],
+        properties: {
+          chineseName: { type: "string" },
+          englishName: { type: "string" },
+          coreMeaning: { type: "string" },
+          baziAnalysis: { type: "string" },
+          homophoneCheck: {
+            type: "object",
+            additionalProperties: false,
+            required: ["mandarin", "overall"],
+            properties: {
+              mandarin: { type: "string" },
+              dialects: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["dialect", "risk", "note"],
+                  properties: {
+                    dialect: { type: "string" },
+                    risk: { type: "string" },
+                    note: { type: "string" },
+                  },
+                },
+              },
+              english: { type: "string" },
+              overall: { type: "string" },
+            },
+          },
+          poetryReference: {
+            type: "object",
+            additionalProperties: false,
+            required: ["level", "source", "explanation"],
+            properties: {
+              level: { type: "string" },
+              source: { type: "string" },
+              explanation: { type: "string" },
+            },
+          },
+          historyReference: {
+            type: "object",
+            additionalProperties: false,
+            required: ["source", "explanation"],
+            properties: {
+              source: { type: "string" },
+              explanation: { type: "string" },
+            },
+          },
+          englishEtymology: {
+            type: "object",
+            additionalProperties: false,
+            required: ["etymology", "originalMeaning", "relationToChinese"],
+            properties: {
+              etymology: { type: "string" },
+              originalMeaning: { type: "string" },
+              relationToChinese: { type: "string" },
+            },
+          },
+        },
+      },
+    },
+    summary: { type: "string" },
+  },
+} as const;
 
 /**
  * Agent configuration defining persona and behavior
@@ -32,33 +120,76 @@ export interface AgentRunOptions {
 }
 
 /**
- * Gemini API response structure
+ * Extended options for running an agent with provider selection
  */
-interface GeminiResponse {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text: string;
-      }>;
-    };
-  }>;
+export interface AgentRunOptionsWithProvider extends AgentRunOptions {
+  /** Preferred LLM provider (optional, uses default if not specified) */
+  provider?: LLMProvider;
 }
 
 /**
- * Structured error with context for Gemini API failures
+ * Global provider manager instance (initialized on first use)
  */
-interface GeminiApiError extends Error {
-  code?: string;
-  status?: number;
+let globalProviderManager: ProviderManager | null = null;
+
+/**
+ * Initialize the global provider manager with available API keys
+ * Call this once at application startup
+ */
+export function initializeProviders(options: {
+  geminiApiKey?: string;
+  zhipuApiKey?: string;
+  defaultProvider?: LLMProvider;
+}): void {
+  const configs: Array<{ name: LLMProvider; apiKey: string }> = [];
+
+  // Add providers in priority order (first is default)
+  const defaultProvider = options.defaultProvider || 'gemini';
+
+  if (defaultProvider === 'gemini') {
+    if (options.geminiApiKey) {
+      configs.push({ name: 'gemini', apiKey: options.geminiApiKey });
+    }
+    if (options.zhipuApiKey) {
+      configs.push({ name: 'zhipu', apiKey: options.zhipuApiKey });
+    }
+  } else {
+    if (options.zhipuApiKey) {
+      configs.push({ name: 'zhipu', apiKey: options.zhipuApiKey });
+    }
+    if (options.geminiApiKey) {
+      configs.push({ name: 'gemini', apiKey: options.geminiApiKey });
+    }
+  }
+
+  if (configs.length === 0) {
+    throw new Error('At least one API key must be provided');
+  }
+
+  globalProviderManager = new ProviderManager(
+    configs.map(config => ({
+      name: config.name,
+      apiKey: config.apiKey,
+      timeout: 60000, // 60 second timeout
+    }))
+  );
+
+  console.log(`[Providers] Initialized with ${configs.length} providers: ${configs.map(c => c.name).join(', ')}`);
 }
 
 /**
- * Creates a Gemini API error with context
+ * Get the global provider manager (initializes with default if not already initialized)
  */
-function createGeminiError(message: string, status?: number): GeminiApiError {
-  const error = new Error(message) as GeminiApiError;
-  error.status = status;
-  return error;
+function getProviderManager(apiKey: string): ProviderManager {
+  if (!globalProviderManager) {
+    // Fallback: initialize with Gemini only for backward compatibility
+    globalProviderManager = new ProviderManager([{
+      name: 'gemini',
+      apiKey,
+      timeout: 60000,
+    }]);
+  }
+  return globalProviderManager;
 }
 
 /**
@@ -66,7 +197,7 @@ function createGeminiError(message: string, status?: number): GeminiApiError {
  *
  * @param config - Agent configuration (name, persona, system prompt)
  * @param options - Run options (context, constraints)
- * @param apiKey - Gemini API key
+ * @param apiKey - API key (used for default provider if provider manager not initialized)
  * @returns AgentOutput with status and data
  *
  * @example
@@ -82,75 +213,81 @@ export async function runAgent<T>(
   options: AgentRunOptions,
   apiKey: string
 ): Promise<AgentOutput<T>> {
+  return runAgentWithProvider<T>(config, options, apiKey);
+}
+
+/**
+ * Runs an agent using the LLM provider manager with automatic fallback
+ *
+ * @param config - Agent configuration (name, persona, system prompt)
+ * @param options - Run options with optional provider selection
+ * @param apiKey - Default API key (used if provider manager not initialized)
+ * @returns AgentOutput with status and data
+ */
+export async function runAgentWithProvider<T>(
+  config: AgentConfig,
+  options: AgentRunOptionsWithProvider,
+  apiKey: string
+): Promise<AgentOutput<T>> {
   const agentContext = { agentName: config.name };
 
   try {
     const prompt = buildPrompt(config, options);
 
-    console.log(`[Agent:${config.name}] Starting HTTPS request to Gemini API...`);
+    const providerManager = getProviderManager(apiKey);
+    console.log(`[Agent:${config.name}] Using provider: ${providerManager.getCurrentProviderName()}`);
 
-    const requestBody = JSON.stringify({
-      contents: [
-        {
-          parts: [
-            {
-              text: prompt,
-            },
-          ],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.5, // Lower temperature for faster, more deterministic responses
-        maxOutputTokens: 16384, // Reduced from 32768 for faster responses
-        responseMimeType: "application/json",
-      },
-    });
+    const isFastNaming = config.name === "快速起名专家";
+    const isAggregator = config.name === "汇总员";
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: requestBody,
-        // Add signal for timeout handling - 45 second timeout per agent
-        signal: AbortSignal.timeout(45000),
-      }
-    );
+    // Set max tokens based on agent type - aggregators need more output space
+    const initialMaxTokens = isAggregator ? 8192 : isFastNaming ? 6144 : 4096;
 
-    console.log(`[Agent:${config.name}] Response status: ${response.status}`);
+    const fetchContent = async (promptText: string, maxOutputTokens: number): Promise<string> => {
+      const responseJsonSchema =
+        config.name === "快速起名专家" || config.name === "汇总员"
+          ? NAME_SCHEMES_RESPONSE_JSON_SCHEMA
+          : undefined;
 
-    if (!response.ok) {
-      // Try to get error details from response
-      const errorBody = await response.text();
-      console.error(`[Agent:${config.name}] Gemini API error body:`, errorBody);
-      throw createGeminiError(`Gemini API error: ${response.status} - ${errorBody}`, response.status);
-    }
+      // Use provider manager to generate content with fallback
+      const result = await providerManager.generateContentWithFallback({
+        messages: [
+          { role: 'user', content: promptText }
+        ],
+        temperature: 0.5,
+        maxTokens: maxOutputTokens,
+        responseMimeType: 'application/json',
+        responseJsonSchema: responseJsonSchema as Record<string, unknown> | undefined,
+      });
 
-    const geminiResponse = await response.json() as GeminiResponse;
-    const content = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+      console.log(`[Agent:${config.name}] Generated content length: ${result.content.length}`);
+      return result.content;
+    };
 
-    if (!content) {
-      return {
-        status: "failed",
-        data: {} as T,
-        notes: "No content generated",
-      };
-    }
+    let content = await fetchContent(prompt, initialMaxTokens);
 
     // Parse JSON with explicit error handling
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);
     } catch (parseError: unknown) {
-      const errorMessage = parseError instanceof Error ? parseError.message : "Invalid JSON";
-      console.error(`Agent ${config.name} JSON parse error:`, errorMessage, "Content:", content);
-      return {
-        status: "failed",
-        data: {} as T,
-        notes: `JSON parse failed: ${errorMessage}`,
-      };
+      // Retry with stricter JSON format instructions and higher token limit
+      try {
+        content = await fetchContent(
+          `${prompt}\n\n严格要求：只输出一个完整 JSON（不要 markdown），并保证 JSON 结尾完整闭合；整体输出必须是单行 JSON；所有字符串字段不得包含换行符；避免超长输出。`,
+          isAggregator ? 12288 : 8192
+        );
+        parsed = JSON.parse(content);
+      } catch (retryError: unknown) {
+        const errorMessage = parseError instanceof Error ? parseError.message : "Invalid JSON";
+        console.error(`Agent ${config.name} JSON parse error:`, errorMessage, "Content:", content);
+        const retryMessage = retryError instanceof Error ? retryError.message : "Retry failed";
+        return {
+          status: "failed",
+          data: {} as T,
+          notes: `JSON parse failed: ${errorMessage}; retry failed: ${retryMessage}`,
+        };
+      }
     }
 
     // Type guard: ensure parsed data has expected structure
@@ -408,6 +545,8 @@ export const AGGREGATOR_AGENT: AgentConfig = {
    - 女性名字：优先出自诗经（不必须，可灵活选择）
 3. 每个方案必须包含 agentNotes 字段，用于在「专家组综合考量」中展示
 4. 简洁为主：生成 4-6 个方案即可
+5. 所有字符串字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，每个 explanation≤40 字
+6. JSON 必须完整闭合，不得截断
 
 输出 JSON 格式：
 {
@@ -449,4 +588,18 @@ export const AGGREGATOR_AGENT: AgentConfig = {
   ],
   "summary": "汇总员的总结评语 (30 字内)"
 }`
+};
+
+export const FAST_NAMING_AGENT: AgentConfig = {
+  name: "快速起名专家",
+  persona: "你是一位高效的中文起名顾问，擅长在有限信息下给出可落地、好读好写、寓意清晰的名字方案。",
+  systemPrompt: `根据输入信息给出名字方案。硬性要求：
+1) 只输出严格 JSON（单行），不要 Markdown，不要任何解释文字
+2) 所有字符串字段不得包含换行符，每个字段控制在 50 字以内
+3) isPremium=true 输出 4 条，否则输出 2 条
+4) 中文名 2-3 个汉字，好读好写，避免生僻字与明显歧义
+5) 结合字辈/风格/特殊诉求，给出简洁的八字/五行建议与谐音检查
+6) isPremium=true 时每条包含 englishName，否则不要输出 englishName 字段
+7) 字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，homophoneCheck.mandarin≤20 字
+8) JSON 必须完整闭合，不得截断`,
 };

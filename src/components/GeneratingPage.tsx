@@ -20,6 +20,16 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry, pollAtt
   const { generationStatus } = useWorkflowStore();
   const [currentStage, setCurrentStage] = React.useState("analyze");
   const [stageMessage, setStageMessage] = React.useState("正在初始化...");
+  const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
+
+  React.useEffect(() => {
+    if (generationStatus !== "processing") return;
+    setElapsedSeconds(0);
+    const intervalId = setInterval(() => {
+      setElapsedSeconds((s) => (s >= 30 ? 30 : s + 1));
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, [generationStatus]);
 
   // Update stage and message based on poll attempts
   React.useEffect(() => {
@@ -64,8 +74,22 @@ export const GeneratingPage: React.FC<GeneratingPageProps> = ({ onRetry, pollAtt
   };
 
   // Calculate progress percentage based on poll attempts
-  const progress = Math.min(Math.floor((pollAttempts / 90) * 100), 99);
-  const estimatedRemaining = Math.max(0, Math.ceil((90 - pollAttempts) * 2 / 3)); // Rough estimate in seconds
+  const progressFromPoll = Math.min(Math.floor((pollAttempts / 90) * 100), 99);
+  const progressFromTime = Math.min(Math.floor((elapsedSeconds / 30) * 100), 100);
+  const progress =
+    generationStatus === "completed"
+      ? 100
+      : generationStatus === "processing"
+        ? pollAttempts > 0
+          ? progressFromPoll
+          : progressFromTime
+        : 0;
+  const estimatedRemaining =
+    generationStatus === "processing"
+      ? pollAttempts > 0
+        ? Math.max(0, Math.ceil((90 - pollAttempts) * 2 / 3))
+        : Math.max(0, 30 - elapsedSeconds)
+      : 0;
 
   if (generationStatus === "failed") {
     return (

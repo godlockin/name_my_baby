@@ -7,7 +7,7 @@ interface TreeDiagramProps {
   nameScheme: NameScheme;
   fatherName: string;
   motherName: string;
-  children: Array<{
+  childrenInfo: Array<{
     name?: string;
     gender: "male" | "female";
     birthYear: number;
@@ -25,7 +25,7 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
   nameScheme,
   fatherName,
   motherName,
-  children,
+  childrenInfo,
 }) => {
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({
     family: true,
@@ -61,7 +61,7 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
   const baziInfo = formatBaziInfo();
 
   // 获取孩子信息
-  const childInfo = children.map((child, index) => ({
+  const childInfo = childrenInfo.map((child, index) => ({
     ...child,
     label: `孩子${index + 1}${child.name ? `（${child.name}）` : ""}`,
     birthInfo: `${child.birthYear}年${child.birthMonth}月${child.birthDay}日${child.birthHour}时`,
