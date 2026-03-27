@@ -122,6 +122,10 @@ export class GeminiProvider extends LLMProviderBase {
       },
       body: requestBody,
       signal: this.createTimeoutSignal(),
+      // Keep exit IP as Cloudflare's edge IP, not client IP
+      cf: {
+        keepClientIPAddress: false,
+      },
     });
 
     if (!response.ok) {
@@ -203,6 +207,10 @@ export class ZhipuProvider extends LLMProviderBase {
       },
       body: requestBody,
       signal: this.createTimeoutSignal(),
+      // Keep exit IP as Cloudflare's edge IP, not client IP
+      cf: {
+        keepClientIPAddress: false,
+      },
     });
 
     if (!response.ok) {
