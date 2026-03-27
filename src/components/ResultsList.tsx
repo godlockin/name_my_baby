@@ -91,15 +91,16 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   }, [displayedNames, sortBy]);
 
   // Get original scheme by ID from the correct source array
-  const getOriginalScheme = (id: string): NameScheme | null => {
-    const source = filter === "saved" ? savedNames : names;
+  // Use callback pattern to always get latest state
+  const getOriginalScheme = React.useCallback((id: string, currentFilter: "all" | "saved"): NameScheme | null => {
+    const source = currentFilter === "saved" ? savedNames : names;
     return source.find((n) => n.id === id) || null;
-  };
+  }, [names, savedNames]);
 
   const handleToggleSave = (id: string) => {
-    const originalScheme = getOriginalScheme(id);
+    const originalScheme = getOriginalScheme(id, filter);
     if (!originalScheme) {
-      console.error('[ResultsList] No scheme found for id:', id);
+      console.error('[ResultsList] ToggleSave: No scheme found for id:', id);
       return;
     }
 
@@ -183,7 +184,7 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 key={`${filter}-${id}`}
                 className="card name-card cursor-pointer"
                 onClick={() => {
-                  const originalScheme = getOriginalScheme(id);
+                  const originalScheme = getOriginalScheme(id, filter);
                   if (!originalScheme) {
                     console.error('[ResultsList] Click: No scheme found for id:', id);
                     return;

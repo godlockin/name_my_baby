@@ -46,6 +46,36 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
     overall: "safe" as const,
   };
 
+  // Safe access to poetry reference with default values
+  const poetryRef = nameScheme.poetryReference || {
+    level: "" as string | undefined,
+    source: "",
+    original: "" as string | undefined,
+    explanation: "",
+  };
+
+  // Safe access to history reference with default values
+  const historyRef = nameScheme.historyReference || {
+    source: "",
+    original: "" as string | undefined,
+    explanation: "",
+  };
+
+  // Safe access to english etymology with default values
+  const englishEty = nameScheme.englishEtymology || {
+    etymology: "",
+    originalMeaning: "",
+    relationToChinese: "",
+  };
+
+  // Safe access to agent notes with default values
+  const agentNotes = nameScheme.agentNotes || {
+    bazi: "" as string | undefined,
+    homophone: "" as string | undefined,
+    poetry: "" as string | undefined,
+    history: "" as string | undefined,
+  };
+
   // 提取姓氏
   const surnameChoice = nameScheme.surnameSource || "father"; // Default to father's surname
   const surname = surnameChoice === "mother"
@@ -191,46 +221,46 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
           <div className="tree-content">
             <div className="agents-grid">
               {/* 八字分析师 */}
-              {nameScheme.agentNotes?.bazi && (
+              {agentNotes.bazi && (
                 <div className="agent-card">
                   <div className="agent-header">
                     <span className="agent-icon">🔮</span>
                     <span className="agent-title">八字分析师</span>
                   </div>
-                  <p className="agent-note">{nameScheme.agentNotes.bazi}</p>
+                  <p className="agent-note">{agentNotes.bazi}</p>
                 </div>
               )}
 
               {/* 谐音梗专家 */}
-              {nameScheme.agentNotes?.homophone && (
+              {agentNotes.homophone && (
                 <div className="agent-card">
                   <div className="agent-header">
                     <span className="agent-icon">🎯</span>
                     <span className="agent-title">谐音梗专家</span>
                   </div>
-                  <p className="agent-note">{nameScheme.agentNotes.homophone}</p>
+                  <p className="agent-note">{agentNotes.homophone}</p>
                 </div>
               )}
 
               {/* 古诗词专家 */}
-              {nameScheme.agentNotes?.poetry && (
+              {agentNotes.poetry && (
                 <div className="agent-card">
                   <div className="agent-header">
                     <span className="agent-icon">📖</span>
                     <span className="agent-title">古诗词专家</span>
                   </div>
-                  <p className="agent-note">{nameScheme.agentNotes.poetry}</p>
+                  <p className="agent-note">{agentNotes.poetry}</p>
                 </div>
               )}
 
               {/* 历史学家 */}
-              {nameScheme.agentNotes?.history && (
+              {agentNotes.history && (
                 <div className="agent-card">
                   <div className="agent-header">
                     <span className="agent-icon">🏛️</span>
                     <span className="agent-title">历史学家</span>
                   </div>
-                  <p className="agent-note">{nameScheme.agentNotes.history}</p>
+                  <p className="agent-note">{agentNotes.history}</p>
                 </div>
               )}
             </div>
@@ -260,17 +290,19 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                   <div className="reference-header">
                     <span className="reference-icon">📜</span>
                     <span className="reference-title">诗词出处</span>
-                    {nameScheme.poetryReference.level && (
-                      <span className="reference-level">{nameScheme.poetryReference.level}</span>
+                    {poetryRef.level && (
+                      <span className="reference-level">{poetryRef.level}</span>
                     )}
                   </div>
-                  {nameScheme.poetryReference.original && (
-                    <p className="reference-original">{nameScheme.poetryReference.original}</p>
+                  {poetryRef.original && (
+                    <p className="reference-original">{poetryRef.original}</p>
                   )}
-                  {nameScheme.poetryReference.source && (
-                    <p className="reference-source">出自：{nameScheme.poetryReference.source}</p>
+                  {poetryRef.source && (
+                    <p className="reference-source">出自：{poetryRef.source}</p>
                   )}
-                  <p className="reference-explanation">{nameScheme.poetryReference.explanation}</p>
+                  {poetryRef.explanation && (
+                    <p className="reference-explanation">{poetryRef.explanation}</p>
+                  )}
                 </div>
               )}
 
@@ -281,13 +313,15 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                     <span className="reference-icon">🏺</span>
                     <span className="reference-title">历史典故</span>
                   </div>
-                  {nameScheme.historyReference.original && (
-                    <p className="reference-original">{nameScheme.historyReference.original}</p>
+                  {historyRef.original && (
+                    <p className="reference-original">{historyRef.original}</p>
                   )}
-                  {nameScheme.historyReference.source && (
-                    <p className="reference-source">出自：{nameScheme.historyReference.source}</p>
+                  {historyRef.source && (
+                    <p className="reference-source">出自：{historyRef.source}</p>
                   )}
-                  <p className="reference-explanation">{nameScheme.historyReference.explanation}</p>
+                  {historyRef.explanation && (
+                    <p className="reference-explanation">{historyRef.explanation}</p>
+                  )}
                 </div>
               )}
 
@@ -299,11 +333,19 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                     <span className="reference-title">英文名词源</span>
                   </div>
                   <p className="reference-explanation">
-                    <strong>{nameScheme.englishEtymology.etymology}</strong>
-                    <br />
-                    原意：{nameScheme.englishEtymology.originalMeaning}
-                    <br />
-                    与中文名关联：{nameScheme.englishEtymology.relationToChinese}
+                    {englishEty.etymology && <strong>{englishEty.etymology}</strong>}
+                    {englishEty.originalMeaning && (
+                      <>
+                        <br />
+                        原意：{englishEty.originalMeaning}
+                      </>
+                    )}
+                    {englishEty.relationToChinese && (
+                      <>
+                        <br />
+                        与中文名关联：{englishEty.relationToChinese}
+                      </>
+                    )}
                   </p>
                 </div>
               )}
