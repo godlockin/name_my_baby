@@ -38,11 +38,23 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
     setExpanded((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
+  // Safe access to homophone check with default values
+  const homophoneCheck = nameScheme.homophoneCheck || {
+    mandarin: "safe" as const,
+    dialects: [],
+    english: "safe" as const,
+    overall: "safe" as const,
+  };
+
   // 提取姓氏
-  const surname = nameScheme.surnameSource === "mother"
+  const surnameChoice = nameScheme.surnameSource || "father"; // Default to father's surname
+  const surname = surnameChoice === "mother"
     ? motherName.charAt(0)
     : fatherName.charAt(0);
-  const givenName = nameScheme.chineseName.slice(1);
+  // Handle cases where chineseName is empty or too short
+  const givenName = nameScheme.chineseName && nameScheme.chineseName.length > 1
+    ? nameScheme.chineseName.slice(1)
+    : nameScheme.chineseName || "";
 
   // 格式化八字信息
   const formatBaziInfo = () => {
@@ -301,12 +313,12 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                 <div className="reference-header">
                   <span className="reference-icon">🔊</span>
                   <span className="reference-title">谐音检查</span>
-                  <span className={`risk-badge risk-${nameScheme.homophoneCheck.overall}`}>
-                    {nameScheme.homophoneCheck.overall === "safe" ? "安全" :
-                     nameScheme.homophoneCheck.overall === "medium" ? "中等" : "高风险"}
+                  <span className={`risk-badge risk-${homophoneCheck.overall}`}>
+                    {homophoneCheck.overall === "safe" ? "安全" :
+                     homophoneCheck.overall === "medium" ? "中等" : "高风险"}
                   </span>
                 </div>
-                {nameScheme.homophoneCheck.dialects.map((dialect, index) => (
+                {homophoneCheck.dialects.map((dialect, index) => (
                   <div key={index} className="dialect-check">
                     <span>{dialect.dialect}：</span>
                     <span className={`risk-text risk-${dialect.risk}`}>

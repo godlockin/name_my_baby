@@ -94,7 +94,10 @@ export const ResultsList: React.FC<ResultsListProps> = ({
 
   const handleToggleSave = (name: NameResult, originalIndex: number) => {
     const originalScheme = sourceArray[originalIndex];
-    if (!originalScheme) return;
+    if (!originalScheme) {
+      console.error('[ResultsList] No scheme found at index:', originalIndex, 'filter:', filter, 'sourceArray length:', sourceArray.length);
+      return;
+    }
 
     const isSaved = savedNames.find((n) => n.id === originalScheme.id);
     if (isSaved) {
@@ -171,16 +174,19 @@ export const ResultsList: React.FC<ResultsListProps> = ({
         {/* Results Grid */}
         {sortedNames.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sortedNames.map(({ result: name, originalIndex }) => (
+            {sortedNames.map(({ result: name, originalIndex }, arrayIndex) => (
               <div
-                key={`${filter}-${sourceArray[originalIndex]?.id || originalIndex}`}
+                key={`${filter}-${sourceArray[originalIndex]?.id || originalIndex}-${arrayIndex}`}
                 className="card name-card cursor-pointer"
                 onClick={() => {
                   // Use the original index to get the correct scheme directly
                   const originalScheme = sourceArray[originalIndex];
-                  if (originalScheme) {
-                    setSelectedName(originalScheme);
+                  if (!originalScheme) {
+                    console.error('[ResultsList] Click: No scheme found at index:', originalIndex, 'filter:', filter, 'sourceArray length:', sourceArray.length);
+                    return;
                   }
+                  console.log('[ResultsList] Click: Selected name:', originalScheme.chineseName, 'id:', originalScheme.id, 'index:', originalIndex);
+                  setSelectedName(originalScheme);
                 }}
               >
                 <div className="flex items-start justify-between mb-3">
