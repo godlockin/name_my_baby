@@ -126,7 +126,11 @@ export class GeminiProvider extends LLMProviderBase {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`Gemini API error: ${response.status} - ${errorBody}`);
+      const isPermissionError = response.status === 403 || response.status === 401;
+      const errorCode = isPermissionError ? 'PERMISSION_DENIED' : 'API_ERROR';
+      const error = new Error(`Gemini API error: ${response.status} - ${errorBody}`);
+      (error as Error & { code?: string }).code = errorCode;
+      throw error;
     }
 
     const geminiResponse = await response.json() as {
@@ -203,7 +207,11 @@ export class ZhipuProvider extends LLMProviderBase {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`Zhipu AI API error: ${response.status} - ${errorBody}`);
+      const isPermissionError = response.status === 403 || response.status === 401;
+      const errorCode = isPermissionError ? 'PERMISSION_DENIED' : 'API_ERROR';
+      const error = new Error(`Zhipu AI API error: ${response.status} - ${errorBody}`);
+      (error as Error & { code?: string }).code = errorCode;
+      throw error;
     }
 
     const zhipuResponse = await response.json() as {
@@ -278,9 +286,10 @@ export class ProviderManager {
   /**
    * Generate content with automatic fallback
    * Tries current provider, then falls back to next available provider on failure
+   * Permission errors (403/401) cause immediate switch to next provider
    */
   async generateContentWithFallback(options: ChatCompletionOptions): Promise<LLMResponse> {
-    const lastError: Error[] = [];
+    const errors: Error[] = [];
 
     for (let i = 0; i < this.providers.length; i++) {
       const providerIndex = (this.currentProviderIndex + i) % this.providers.length;
@@ -297,13 +306,21 @@ export class ProviderManager {
         return result;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorCode = error instanceof Error && 'code' in error ? (error as Error & { code?: string }).code : undefined;
+
         console.warn(`[ProviderManager] Provider ${provider.getProviderName()} failed: ${errorMessage}`);
-        lastError.push(error instanceof Error ? error : new Error(errorMessage));
+        errors.push(error instanceof Error ? error : new Error(errorMessage));
+
+        // If this is a permission error, skip to next provider immediately
+        if (errorCode === 'PERMISSION_DENIED') {
+          console.warn(`[ProviderManager] Permission denied, skipping to next provider`);
+          continue;
+        }
       }
     }
 
     // All providers failed
-    throw new Error(`All LLM providers failed. Last error: ${lastError[lastError.length - 1]?.message}`);
+    throw new Error(`All LLM providers failed. Last error: ${errors[errors.length - 1]?.message}`);
   }
 
   /**
