@@ -229,6 +229,12 @@ export class AgentTeam {
 
     let schemes = result.data.nameSchemes || [];
 
+    // Ensure each scheme has a unique ID
+    schemes = schemes.map((scheme, index) => ({
+      ...scheme,
+      id: scheme.id || `fast-${context.sessionId}-${index}`,
+    }));
+
     if (!isPremium) {
       schemes = schemes.slice(0, 2).map((scheme) => ({
         ...scheme,
@@ -420,6 +426,12 @@ export class AgentTeam {
     // Post-process: limit results for free users but KEEP english names
     let schemes = result.data.nameSchemes || [];
 
+    // Ensure each scheme has a unique ID
+    schemes = schemes.map((scheme, index) => ({
+      ...scheme,
+      id: scheme.id || `name-${context.sessionId}-${index}`,
+    }));
+
     if (!isPremium) {
       schemes = schemes.slice(0, 2).map((scheme) => ({
         ...scheme,
@@ -462,6 +474,12 @@ export class AgentTeam {
     }
 
     let schemes = result.data.nameSchemes || [];
+
+    // Ensure each scheme has a unique ID
+    schemes = schemes.map((scheme, index) => ({
+      ...scheme,
+      id: scheme.id || `degraded-${context.sessionId}-${index}`,
+    }));
 
     // Limit to 2 schemes for degraded mode
     schemes = schemes.slice(0, 2).map((scheme) => ({
