@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npx wrangler pages dev out --port 3001",
+    "dev": "npx wrangler pages dev .vercel/output/static --port 3001",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

@@ -252,6 +252,14 @@ export class AgentTeam {
         }
       }
 
+      // Add gender if missing (fallback to corresponding child's gender)
+      if (processed.gender === undefined) {
+        const targetChild = userInput.children[processed.targetChildIndex || 0];
+        if (targetChild) {
+          processed.gender = targetChild.gender;
+        }
+      }
+
       // Ensure agentNotes has at least some content
       if (!processed.agentNotes) {
         processed.agentNotes = {};
@@ -346,6 +354,8 @@ export class AgentTeam {
           english: "safe",
           overall: "safe"
         },
+        gender: childGender,
+        targetChildIndex: 0,
         isPremium: false
       },
       {
@@ -360,6 +370,8 @@ export class AgentTeam {
           english: "safe",
           overall: "safe"
         },
+        gender: childGender,
+        targetChildIndex: 0,
         isPremium: false
       }
     ];
@@ -502,6 +514,14 @@ export class AgentTeam {
         }
       }
 
+      // Add gender if missing (fallback to corresponding child's gender)
+      if (processed.gender === undefined) {
+        const targetChild = userInput.children[processed.targetChildIndex || 0];
+        if (targetChild) {
+          processed.gender = targetChild.gender;
+        }
+      }
+
       // Ensure agentNotes has at least some content
       if (!processed.agentNotes) {
         processed.agentNotes = {};
@@ -579,6 +599,14 @@ export class AgentTeam {
         } else {
           // Distribute names among children
           processed.targetChildIndex = index % userInput.children.length;
+        }
+      }
+
+      // Add gender if missing (fallback to corresponding child's gender)
+      if (processed.gender === undefined) {
+        const targetChild = userInput.children[processed.targetChildIndex || 0];
+        if (targetChild) {
+          processed.gender = targetChild.gender;
         }
       }
 
