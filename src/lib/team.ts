@@ -482,13 +482,6 @@ export class AgentTeam {
       throw new Error(`Aggregation failed: ${result.notes}`);
     }
 
-    // Debug: Log raw name schemes from LLM
-    console.log("[aggregateResults] === Raw name schemes from LLM ===");
-    console.log("[aggregateResults] userInput.children:", JSON.stringify(userInput.children));
-    result.data.nameSchemes?.forEach((scheme, idx) => {
-      console.log(`[aggregateResults] Scheme ${idx}: ${scheme.chineseName}, gender: ${scheme.gender}, targetChildIndex: ${scheme.targetChildIndex}`);
-    });
-
     // Post-process: limit results for free users but KEEP english names
     let schemes = result.data.nameSchemes || [];
 

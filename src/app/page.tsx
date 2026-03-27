@@ -5,12 +5,6 @@ import { useState, useEffect } from "react";
 import { generateName, getJobStatus } from "../lib/api";
 import { StepForm, GeneratingPage, ResultsList } from "../components";
 
-type DebugWindow = Window & {
-  __handleSubmitCalled?: boolean;
-  __handleSubmitCalledAt?: string;
-  __handleSubmitCurrentStep?: unknown;
-};
-
 export default function Home() {
   const {
     fatherName, motherName, children, generationChar, stylePreference,
@@ -22,11 +16,6 @@ export default function Home() {
   const [deviceId, setDeviceId] = useState("");
   const [pollAttempts, setPollAttempts] = useState(0);
   const [lastPollStatus, setLastPollStatus] = useState<string>("");
-
-  // Debug: Log generationStatus changes
-  useEffect(() => {
-    console.log('[page.tsx] generationStatus changed to:', generationStatus);
-  }, [generationStatus]);
 
   useEffect(() => {
     let id = localStorage.getItem("deviceId");
@@ -50,12 +39,6 @@ export default function Home() {
   };
 
   const handleSubmit = async () => {
-    console.log('[page.tsx] handleSubmit called, generationStatus:', generationStatus, 'currentStep:', currentStep);
-    // Debug: Set a window flag to track if handleSubmit was called
-    const debugWindow = window as DebugWindow;
-    debugWindow.__handleSubmitCalled = true;
-    debugWindow.__handleSubmitCalledAt = new Date().toISOString();
-    debugWindow.__handleSubmitCurrentStep = currentStep;
     startGeneration();
 
     try {
@@ -71,7 +54,6 @@ export default function Home() {
         deviceId,
       };
 
-      console.log('[page.tsx] Calling generateName API');
       const response = await generateName(data);
 
       if (response.sessionId) {
@@ -79,19 +61,12 @@ export default function Home() {
 
         // Handle synchronous response (API may return completed status immediately)
         if (response.status === "completed" && response.names) {
-          console.log('[page.tsx] API returned completed status with names');
-          console.log('[page.tsx] === Names from API ===');
-          response.names?.forEach((name, idx) => {
-            console.log(`[page.tsx] Name ${idx}: ${name.chineseName}, gender: ${name?.gender}, targetChildIndex: ${name?.targetChildIndex}`);
-          });
           setNames(response.names);
           setGenerationStatus("completed");
         } else if (response.status === "failed") {
-          console.error('[page.tsx] API returned failed status:', response.error);
           setGenerationStatus("failed");
         } else {
           // Start polling for async response
-          console.log('[page.tsx] Starting polling for async response');
           pollResults(response.sessionId);
         }
       }
@@ -115,24 +90,16 @@ export default function Home() {
         setPollAttempts(attempt + 1);
 
         if (data.status === "completed" && data.names) {
-          console.log('[page.tsx] Polling completed with names');
-          console.log('[page.tsx] === Names from polling ===');
-          data.names?.forEach((name, idx) => {
-            console.log(`[page.tsx] Name ${idx}: ${name.chineseName}, gender: ${name?.gender}, targetChildIndex: ${name?.targetChildIndex}`);
-          });
           setNames(data.names);
           setGenerationStatus("completed");
         } else if (data.status === "processing") {
           // Continue polling with timeout protection
           if (attempt < MAX_POLL_ATTEMPTS) {
-            console.log(`[Polling] Attempt ${attempt + 1}/${MAX_POLL_ATTEMPTS}, still processing...`);
             setTimeout(() => poll(attempt + 1), POLL_INTERVAL);
           } else {
-            console.error("[Polling] Timeout after", MAX_POLL_ATTEMPTS, "attempts");
             setGenerationStatus("failed");
           }
         } else if (data.status === "failed") {
-          console.error("[Polling] Job failed:", data.error);
           setGenerationStatus("failed");
         } else {
           // Unknown status, continue polling
@@ -143,7 +110,6 @@ export default function Home() {
           }
         }
       } catch (error) {
-        console.error("Poll error:", error);
         // Retry on network errors, up to 3 times
         if (attempt < MAX_POLL_ATTEMPTS) {
           setTimeout(() => poll(attempt + 1), POLL_INTERVAL);

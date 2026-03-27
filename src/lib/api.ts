@@ -57,7 +57,6 @@ export class ApiRequestError extends Error {
  * ```
  */
 export async function generateName(input: UserInput): Promise<GenerateResponse> {
-  console.log('[api.ts] generateName called with input:', JSON.stringify(input, null, 2));
   const response = await fetch("/api/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

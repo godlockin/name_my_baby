@@ -54,8 +54,6 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
   // Safe access to risk badge
   const overallRisk = homophoneCheck.overall || "safe";
 
-  console.log('[TreeDiagram] homophoneCheck:', homophoneCheck, 'dialects:', dialects);
-
   // Safe access to poetry reference with default values
   const poetryRef = nameScheme.poetryReference || {
     level: "" as string | undefined,
