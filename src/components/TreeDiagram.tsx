@@ -47,7 +47,12 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
   };
 
   // Ensure dialects is always an array
-  const dialects = Array.isArray(homophoneCheck.dialects) ? homophoneCheck.dialects : [];
+  const dialects = homophoneCheck.dialects && Array.isArray(homophoneCheck.dialects)
+    ? homophoneCheck.dialects
+    : [];
+
+  // Safe access to risk badge
+  const overallRisk = homophoneCheck.overall || "safe";
 
   console.log('[TreeDiagram] homophoneCheck:', homophoneCheck, 'dialects:', dialects);
 
@@ -363,12 +368,12 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                 <div className="reference-header">
                   <span className="reference-icon">🔊</span>
                   <span className="reference-title">谐音检查</span>
-                  <span className={`risk-badge risk-${homophoneCheck.overall}`}>
-                    {homophoneCheck.overall === "safe" ? "安全" :
-                     homophoneCheck.overall === "medium" ? "中等" : "高风险"}
+                  <span className={`risk-badge risk-${overallRisk}`}>
+                    {overallRisk === "safe" ? "安全" :
+                     overallRisk === "medium" ? "中等" : "高风险"}
                   </span>
                 </div>
-                {dialects.map((dialect, index) => (
+                {dialects.length > 0 && dialects.map((dialect, index) => (
                   <div key={index} className="dialect-check">
                     <span>{dialect.dialect}：</span>
                     <span className={`risk-text risk-${dialect.risk}`}>
@@ -378,6 +383,9 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                     {dialect.note && <span className="dialect-note"> - {dialect.note}</span>}
                   </div>
                 ))}
+                {dialects.length === 0 && (
+                  <p className="text-gray-500 text-sm">谐音检查数据暂未提供</p>
+                )}
               </div>
             </div>
           </div>
