@@ -125,6 +125,8 @@ export interface NameScheme {
     history?: string; // 历史学家注释
   };
   surnameSource?: "father" | "mother"; // 姓氏来源
+  targetChildIndex?: number; // 目标孩子索引（0-based）
+  gender?: "male" | "female"; // 适合男孩还是女孩
 }
 
 export interface HomophoneResult {
@@ -165,6 +167,8 @@ export interface SharedContext {
   round1?: {
     baziAnalysis: AgentOutput<BaziData>;
     homophoneCheck: AgentOutput<HomophoneData>;
+    perChildBazi?: AgentOutput<BaziData>[]; // Per-child bazi analysis for multi-child families
+    perChildHomophone?: AgentOutput<HomophoneData>[];
   };
   round2?: {
     poetry: AgentOutput<PoetryData>;

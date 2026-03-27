@@ -41,10 +41,15 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
   // Safe access to homophone check with default values
   const homophoneCheck = nameScheme.homophoneCheck || {
     mandarin: "safe" as const,
-    dialects: [],
+    dialects: [] as Array<{dialect: string, risk: string, note?: string}>,
     english: "safe" as const,
     overall: "safe" as const,
   };
+
+  // Ensure dialects is always an array
+  const dialects = Array.isArray(homophoneCheck.dialects) ? homophoneCheck.dialects : [];
+
+  console.log('[TreeDiagram] homophoneCheck:', homophoneCheck, 'dialects:', dialects);
 
   // Safe access to poetry reference with default values
   const poetryRef = nameScheme.poetryReference || {
@@ -69,12 +74,8 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
   };
 
   // Safe access to agent notes with default values
-  const agentNotes = nameScheme.agentNotes || {
-    bazi: "" as string | undefined,
-    homophone: "" as string | undefined,
-    poetry: "" as string | undefined,
-    history: "" as string | undefined,
-  };
+  const agentNotes = nameScheme.agentNotes || {};
+  const hasAgentNotes = !!(agentNotes.bazi || agentNotes.homophone || agentNotes.poetry || agentNotes.history);
 
   // 提取姓氏
   const surnameChoice = nameScheme.surnameSource || "father"; // Default to father's surname
@@ -266,7 +267,7 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
             </div>
 
             {/* 显示提示如果所有专家注释都为空 */}
-            {!agentNotes.bazi && !agentNotes.homophone && !agentNotes.poetry && !agentNotes.history && (
+            {!hasAgentNotes && (
               <p className="text-gray-500 text-sm text-center py-8">
                 专家组分析数据暂未提供
               </p>
@@ -367,7 +368,7 @@ export const TreeDiagram: React.FC<TreeDiagramProps> = ({
                      homophoneCheck.overall === "medium" ? "中等" : "高风险"}
                   </span>
                 </div>
-                {homophoneCheck.dialects.map((dialect, index) => (
+                {dialects.map((dialect, index) => (
                   <div key={index} className="dialect-check">
                     <span>{dialect.dialect}：</span>
                     <span className={`risk-text risk-${dialect.risk}`}>

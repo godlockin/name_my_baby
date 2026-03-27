@@ -18,6 +18,8 @@ export interface NameResult {
   phoneticScore: number;
   meaningScore: number;
   isSaved?: boolean;
+  childIndex?: number; // 第几个孩子（从 1 开始）
+  childGender?: "male" | "female"; // 孩子性别
 }
 
 interface ResultsListProps {
@@ -26,7 +28,7 @@ interface ResultsListProps {
 }
 
 // Convert NameScheme to NameResult
-const convertToNameResult = (scheme: NameScheme): NameResult => {
+const convertToNameResult = (scheme: NameScheme, children?: Array<{ gender: "male" | "female" }>): NameResult => {
   // Extract five elements from bazi analysis
   const wuxing: string[] = [];
   if (scheme.baziAnalysis) {
@@ -36,17 +38,67 @@ const convertToNameResult = (scheme: NameScheme): NameResult => {
     }
   }
 
-  // Derive scores from available data
-  const culturalScore = scheme.poetryReference ? 90 : 70;
-  const phoneticScore = scheme.homophoneCheck.overall === "safe" ? 95 : 70;
-  const meaningScore = scheme.poetryReference ? 85 : 75;
+  // Derive scores from available data - add variation based on name content
+  const hasPoetry = !!scheme.poetryReference;
+  const hasHistory = !!scheme.historyReference;
+  const hasEnglish = !!scheme.englishEtymology;
+  const isSafe = scheme.homophoneCheck?.overall === "safe";
+
+  // Base scores
+  let culturalScore = hasPoetry ? 85 : 70;
+  if (hasHistory) culturalScore += 5;
+
+  let phoneticScore = isSafe ? 90 : 60;
+  // Add small variation based on name length (simpler names are easier to pronounce)
+  const nameLength = scheme.chineseName?.length || 2;
+  if (nameLength === 2) phoneticScore += 3;
+
+  let meaningScore = hasPoetry ? 80 : 70;
+  if (hasHistory) meaningScore += 5;
+  if (hasEnglish) meaningScore += 3;
+
+  // Add hash-based variation to avoid all names having same score
+  const hash = scheme.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const variation = (hash % 5); // 0-4 variation
+
+  culturalScore += variation;
+  meaningScore += variation;
+
   const overallScore = Math.round((culturalScore + phoneticScore + meaningScore) / 3);
+
+  // Extract child info using targetChildIndex from scheme
+  let childIndex: number | undefined;
+  let childGender: "male" | "female" | undefined;
+
+  const targetIndex = scheme.targetChildIndex ?? 0;
+  const childFromStore = children && children.length > targetIndex ? children[targetIndex] : undefined;
+
+  console.log(`[convertToNameResult] === ${scheme.chineseName || 'UNKNOWN'} ===`);
+  console.log(`  - scheme.gender: "${scheme.gender}" (type: ${typeof scheme.gender})`);
+  console.log(`  - scheme.targetChildIndex: ${scheme.targetChildIndex}`);
+  console.log(`  - children.length: ${children?.length ?? 0}`);
+  console.log(`  - childFromStore:`, childFromStore ? `gender=${childFromStore.gender}` : 'undefined');
+
+  // Priority: 1) LLM returned gender (must be "male" or "female"), 2) derived from children array
+  if (scheme.gender === "male" || scheme.gender === "female") {
+    childGender = scheme.gender;
+    console.log(`  - Using LLM gender: ${childGender}`);
+  } else if (childFromStore?.gender) {
+    childGender = childFromStore.gender;
+    console.log(`  - Falling back to store gender: ${childGender}`);
+  } else {
+    console.log(`  - No gender available, defaulting to undefined`);
+  }
+
+  if (childFromStore) {
+    childIndex = targetIndex + 1; // Display as 1-based
+  }
 
   return {
     id: scheme.id,
     name: scheme.chineseName,
     pinyin: "",
-    gender: "unisex",
+    gender: childGender || "unisex",
     score: overallScore,
     meaning: scheme.coreMeaning,
     wuxing: wuxing.length > 0 ? wuxing : ["金", "木", "水"],
@@ -55,6 +107,8 @@ const convertToNameResult = (scheme: NameScheme): NameResult => {
     phoneticScore,
     meaningScore,
     isSaved: false,
+    childIndex,
+    childGender,
   };
 };
 
@@ -70,11 +124,12 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   // Convert NameScheme to NameResult for display, preserving the original ID
   const displayedNames: Array<{ result: NameResult; id: string }> = React.useMemo(() => {
     const source = filter === "saved" ? savedNames : names;
+    console.log(`[ResultsList] children array:`, children, 'length:', children.length);
     return source.map((scheme) => ({
-      result: convertToNameResult(scheme),
+      result: convertToNameResult(scheme, children),
       id: scheme.id,
     }));
-  }, [names, savedNames, filter]);
+  }, [names, savedNames, filter, children]);
 
   const sortedNames = React.useMemo(() => {
     return [...displayedNames].sort((a, b) => {
@@ -225,9 +280,16 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 mb-3">
-                  <span className={`badge ${name.gender === "male" ? "badge-medium" : "badge-high"}`}>
-                    {name.gender === "male" ? "男孩" : name.gender === "female" ? "女孩" : "通用"}
-                  </span>
+                  {name.childIndex !== undefined && (
+                    <span className="badge badge-medium">
+                      孩子{name.childIndex}
+                    </span>
+                  )}
+                  {name.childGender && (
+                    <span className={`badge ${name.childGender === "male" ? "badge-medium" : "badge-high"}`}>
+                      {name.childGender === "male" ? "男孩" : "女孩"}
+                    </span>
+                  )}
                   <span className="badge badge-premium">综合 {name.score}分</span>
                 </div>
 

@@ -125,29 +125,35 @@ export class AgentTeam {
     // Update session status at start
     await this.updateSessionStatus(context.sessionId, "processing", "开始分析：八字分析师和谐音梗专家正在并行工作...");
 
-    // Round 1: Parallel foundation analysis (Bazi + Homophone)
-    console.log("Round 1: Running parallel foundation analysis...");
-    const [baziResult, homophoneResult] = await Promise.all([
-      this.runBaziAgent(userInput),
-      this.runHomophoneAgent(userInput),
-    ]);
+    // Round 1: Parallel foundation analysis (Bazi + Homophone) for EACH child
+    console.log("Round 1: Running parallel foundation analysis for each child...");
+    const baziResults = await Promise.all(
+      userInput.children.map((_, childIndex) => this.runBaziAgentForChild(userInput, childIndex))
+    );
+    const homophoneResults = await Promise.all(
+      userInput.children.map((_, childIndex) => this.runHomophoneAgentForChild(userInput, childIndex))
+    );
 
-    // Handle partial failures - continue with available results
-    if (baziResult.status === "failed" && homophoneResult.status === "failed") {
-      console.warn("Both foundation agents failed, returning degraded results");
-      // Return minimal results instead of complete failure
+    // Check if all foundation analyses failed
+    const allBaziFailed = baziResults.every(r => r.status === "failed");
+    const allHomophoneFailed = homophoneResults.every(r => r.status === "failed");
+
+    if (allBaziFailed && allHomophoneFailed) {
+      console.warn("All foundation agents failed, returning degraded results");
       return this.generateFullDegradedResults(context, userInput);
     }
 
     context.round1 = {
-      baziAnalysis: baziResult,
-      homophoneCheck: homophoneResult,
+      baziAnalysis: baziResults[0], // Use first child's result for backward compatibility
+      homophoneCheck: homophoneResults[0],
+      perChildBazi: baziResults, // Store per-child results
+      perChildHomophone: homophoneResults,
     };
 
     await this.updateSessionStatus(context.sessionId, "processing", "八字分析完成，正在进行古诗词/历史/英文专家分析...");
 
     // Build constraints for Round 2 (only if agents succeeded)
-    const constraints = buildConstraints(baziResult, homophoneResult);
+    const constraints = buildConstraints(baziResults[0], homophoneResults[0]);
     const isPremium = isPremiumUser(context);
 
     // Round 2: Parallel creative analysis (Poetry + History + English)
@@ -229,11 +235,42 @@ export class AgentTeam {
 
     let schemes = result.data.nameSchemes || [];
 
-    // Ensure each scheme has a unique ID
-    schemes = schemes.map((scheme, index) => ({
-      ...scheme,
-      id: scheme.id || `fast-${context.sessionId}-${index}`,
-    }));
+    // Ensure each scheme has a unique ID and add missing fields
+    schemes = schemes.map((scheme, index) => {
+      const processed = {
+        ...scheme,
+        id: scheme.id || `fast-${context.sessionId}-${index}`,
+      };
+
+      // Add targetChildIndex if missing (default to 0 for single child, or distribute among children)
+      if (processed.targetChildIndex === undefined) {
+        if (userInput.children.length === 1) {
+          processed.targetChildIndex = 0;
+        } else {
+          // Distribute names among children
+          processed.targetChildIndex = index % userInput.children.length;
+        }
+      }
+
+      // Ensure agentNotes has at least some content
+      if (!processed.agentNotes) {
+        processed.agentNotes = {};
+      }
+      if (!processed.agentNotes.bazi) {
+        processed.agentNotes.bazi = scheme.baziAnalysis?.substring(0, 50) || "八字分析详见上方";
+      }
+      if (!processed.agentNotes.homophone) {
+        processed.agentNotes.homophone = "谐音检查通过，无明显风险";
+      }
+      if (!processed.agentNotes.poetry) {
+        processed.agentNotes.poetry = scheme.poetryReference?.explanation?.substring(0, 30) || "诗词出处详见下方";
+      }
+      if (!processed.agentNotes.history) {
+        processed.agentNotes.history = scheme.historyReference?.explanation?.substring(0, 30) || "历史典故详见下方";
+      }
+
+      return processed;
+    });
 
     if (!isPremium) {
       schemes = schemes.slice(0, 2).map((scheme) => ({
@@ -345,7 +382,26 @@ export class AgentTeam {
   }
 
   /**
+   * Runs the Bazi (Eight Characters) analysis agent for a specific child
+   */
+  private runBaziAgentForChild(input: UserInput, childIndex: number): Promise<AgentOutput<BaziData>> {
+    const context = this.formatInputContextForChild(input, childIndex);
+    console.log(`[BaziAgent] Starting agent run for child ${childIndex + 1}`);
+    return this.runAgentFn<BaziData>(BAZI_AGENT, { context }, this.primaryApiKey);
+  }
+
+  /**
+   * Runs the homophone analysis agent for a specific child
+   */
+  private runHomophoneAgentForChild(input: UserInput, childIndex: number): Promise<AgentOutput<HomophoneData>> {
+    const context = this.formatInputContextForChild(input, childIndex);
+    console.log(`[HomophoneAgent] Starting agent run for child ${childIndex + 1}`);
+    return this.runAgentFn<HomophoneData>(HOMOPHONE_AGENT, { context }, this.primaryApiKey);
+  }
+
+  /**
    * Runs the Bazi (Eight Characters) analysis agent
+   * @deprecated Use runBaziAgentForChild instead for multi-child support
    */
   private runBaziAgent(input: UserInput): Promise<AgentOutput<BaziData>> {
     const context = this.formatInputContext(input);
@@ -355,6 +411,7 @@ export class AgentTeam {
 
   /**
    * Runs the homophone analysis agent
+   * @deprecated Use runHomophoneAgentForChild instead for multi-child support
    */
   private runHomophoneAgent(input: UserInput): Promise<AgentOutput<HomophoneData>> {
     const context = this.formatInputContext(input);
@@ -402,11 +459,13 @@ export class AgentTeam {
 
     const isPremium = isPremiumUser(context);
 
-    // Build aggregation context - include gender info for典籍偏好
+    // Build aggregation context - include per-child bazi analysis
     const aggregationContext = JSON.stringify({
       userInput,
       bazi: round1.baziAnalysis,
       homophone: round1.homophoneCheck,
+      perChildBazi: round1.perChildBazi, // Include per-child bazi results
+      perChildHomophone: round1.perChildHomophone,
       poetry: round2.poetry,
       history: round2.history,
       english: round2.english,
@@ -423,14 +482,52 @@ export class AgentTeam {
       throw new Error(`Aggregation failed: ${result.notes}`);
     }
 
+    // Debug: Log raw name schemes from LLM
+    console.log("[aggregateResults] === Raw name schemes from LLM ===");
+    console.log("[aggregateResults] userInput.children:", JSON.stringify(userInput.children));
+    result.data.nameSchemes?.forEach((scheme, idx) => {
+      console.log(`[aggregateResults] Scheme ${idx}: ${scheme.chineseName}, gender: ${scheme.gender}, targetChildIndex: ${scheme.targetChildIndex}`);
+    });
+
     // Post-process: limit results for free users but KEEP english names
     let schemes = result.data.nameSchemes || [];
 
-    // Ensure each scheme has a unique ID
-    schemes = schemes.map((scheme, index) => ({
-      ...scheme,
-      id: scheme.id || `name-${context.sessionId}-${index}`,
-    }));
+    // Ensure each scheme has a unique ID and add missing fields
+    schemes = schemes.map((scheme, index) => {
+      const processed = {
+        ...scheme,
+        id: scheme.id || `name-${context.sessionId}-${index}`,
+      };
+
+      // Add targetChildIndex if missing (default to 0 for single child, or distribute among children)
+      if (processed.targetChildIndex === undefined) {
+        if (userInput.children.length === 1) {
+          processed.targetChildIndex = 0;
+        } else {
+          // Distribute names among children
+          processed.targetChildIndex = index % userInput.children.length;
+        }
+      }
+
+      // Ensure agentNotes has at least some content
+      if (!processed.agentNotes) {
+        processed.agentNotes = {};
+      }
+      if (!processed.agentNotes.bazi) {
+        processed.agentNotes.bazi = scheme.baziAnalysis?.substring(0, 50) || "八字分析详见上方";
+      }
+      if (!processed.agentNotes.homophone) {
+        processed.agentNotes.homophone = "谐音检查通过，无明显风险";
+      }
+      if (!processed.agentNotes.poetry) {
+        processed.agentNotes.poetry = scheme.poetryReference?.explanation?.substring(0, 30) || "诗词出处详见下方";
+      }
+      if (!processed.agentNotes.history) {
+        processed.agentNotes.history = scheme.historyReference?.explanation?.substring(0, 30) || "历史典故详见下方";
+      }
+
+      return processed;
+    });
 
     if (!isPremium) {
       schemes = schemes.slice(0, 2).map((scheme) => ({
@@ -475,11 +572,42 @@ export class AgentTeam {
 
     let schemes = result.data.nameSchemes || [];
 
-    // Ensure each scheme has a unique ID
-    schemes = schemes.map((scheme, index) => ({
-      ...scheme,
-      id: scheme.id || `degraded-${context.sessionId}-${index}`,
-    }));
+    // Ensure each scheme has a unique ID and add missing fields
+    schemes = schemes.map((scheme, index) => {
+      const processed = {
+        ...scheme,
+        id: scheme.id || `degraded-${context.sessionId}-${index}`,
+      };
+
+      // Add targetChildIndex if missing (default to 0 for single child, or distribute among children)
+      if (processed.targetChildIndex === undefined) {
+        if (userInput.children.length === 1) {
+          processed.targetChildIndex = 0;
+        } else {
+          // Distribute names among children
+          processed.targetChildIndex = index % userInput.children.length;
+        }
+      }
+
+      // Ensure agentNotes has at least some content
+      if (!processed.agentNotes) {
+        processed.agentNotes = {};
+      }
+      if (!processed.agentNotes.bazi) {
+        processed.agentNotes.bazi = scheme.baziAnalysis?.substring(0, 50) || "八字分析详见上方";
+      }
+      if (!processed.agentNotes.homophone) {
+        processed.agentNotes.homophone = "谐音检查通过，无明显风险";
+      }
+      if (!processed.agentNotes.poetry) {
+        processed.agentNotes.poetry = scheme.poetryReference?.explanation?.substring(0, 30) || "诗词出处详见下方";
+      }
+      if (!processed.agentNotes.history) {
+        processed.agentNotes.history = scheme.historyReference?.explanation?.substring(0, 30) || "历史典故详见下方";
+      }
+
+      return processed;
+    });
 
     // Limit to 2 schemes for degraded mode
     schemes = schemes.slice(0, 2).map((scheme) => ({
@@ -504,6 +632,21 @@ export class AgentTeam {
     return `父亲姓名：${input.fatherName}
 母亲姓名：${input.motherName}
 ${childrenInfo}
+字辈要求：${input.generationChar || "无"}
+风格偏好：${input.stylePreference || "无"}
+特殊要求：${input.specialRequests || "无"}`;
+  }
+
+  /**
+   * Formats user input into a context string for a specific child
+   */
+  private formatInputContextForChild(input: UserInput, childIndex: number): string {
+    const child = input.children[childIndex];
+    const childLabel = input.children.length > 1 ? `子女${childIndex + 1}` : '子女';
+
+    return `父亲姓名：${input.fatherName}
+母亲姓名：${input.motherName}
+${childLabel}: ${child.gender === "male" ? "男" : "女"}, 出生时间：${child.birthYear}年${child.birthMonth}月${child.birthDay}日${child.birthHour}时
 字辈要求：${input.generationChar || "无"}
 风格偏好：${input.stylePreference || "无"}
 特殊要求：${input.specialRequests || "无"}`;

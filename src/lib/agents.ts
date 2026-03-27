@@ -90,6 +90,9 @@ const NAME_SCHEMES_RESPONSE_JSON_SCHEMA = {
               relationToChinese: { type: "string" },
             },
           },
+          targetChildIndex: { type: "number" },
+          gender: { type: "string", enum: ["male", "female"] },
+          isPremium: { type: "boolean" },
         },
       },
     },
@@ -540,19 +543,26 @@ export const AGGREGATOR_AGENT: AgentConfig = {
 
 重要要求：
 1. 名字长度：同时提供 2 个字和 3 个字的名字方案（例如：张三、张三丰）
-2. 典籍偏好：
+2. 字辈处理：如果用户提供了字辈要求，字辈应放在姓之后（如：张 + 字辈 + 名 = 三字名，或张 + 字辈 = 两字名）
+3. 典籍偏好：
    - 男性名字：优先出自四书五经（论语、孟子、大学、中庸、诗经、尚书、礼记、周易、春秋）
    - 女性名字：优先出自诗经（不必须，可灵活选择）
-3. 每个方案必须包含 agentNotes 字段，用于在「专家组综合考量」中展示
-4. 简洁为主：生成 4-6 个方案即可
-5. 所有字符串字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，每个 explanation≤40 字
-6. JSON 必须完整闭合，不得截断
-7. 每个方案必须包含 englishName 字段（英文名与中文名寓意或发音关联）
-
-多子女起名要求：
-- 如果有多个子女，每个子女的名字应该相互关联（如共用字辈、同主题、同风格）
-- 名字之间要有呼应关系，体现兄弟姐妹的亲情纽带
-- 在 coreMeaning 中说明与其他子女名字的关联性
+4. 每个方案必须包含 agentNotes 字段，且每个专家的评语都不能为空（至少 10 字）
+5. 简洁为主：生成 4-6 个方案即可
+6. 所有字符串字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，每个 explanation≤40 字
+7. JSON 必须完整闭合，不得截断
+8. 每个方案必须包含 englishName 字段（英文名与中文名寓意或发音关联）
+9. 多子女家庭：每个名字方案必须标注 targetChildIndex（从 0 开始），指定该名字是给第几个孩子的
+10. 性别标注：每个名字方案必须标注 gender 字段（"male" 或 "female"），明确说明适合男孩还是女孩
+11. 性别匹配：必须根据 targetChildIndex 对应孩子的性别起名，男孩用男性化名字，女孩用女性化名字
+12. 个性化起名：每个孩子的名字必须根据其独立信息综合考量：
+    - 姓氏（父姓或母姓）
+    - 出生年月日时（八字五行分析）- 使用 perChildBazi 中对应孩子的分析结果
+    - 字辈要求（如有）
+    - 风格偏好（如有）
+    - 特殊要求（如有）
+    不可混用不同孩子的信息，不可模板化处理
+13. 多子女分别分析：输入中包含 perChildBazi 和 perChildHomophone 数组，每个元素对应一个孩子的分析结果，必须分别为每个孩子起名
 
 输出 JSON 格式：
 {
@@ -584,11 +594,13 @@ export const AGGREGATOR_AGENT: AgentConfig = {
         "relationToChinese": "与中文名关联"
       },
       "agentNotes": {
-        "bazi": "八字分析师的简短评语",
-        "homophone": "谐音梗专家的简短评语",
-        "poetry": "古诗词专家的简短评语",
-        "history": "历史学家的简短评语"
+        "bazi": "八字分析师的简短评语（必须包含五行分析建议）",
+        "homophone": "谐音梗专家的简短评语（必须说明是否有谐音风险）",
+        "poetry": "古诗词专家的简短评语（必须说明诗词出处）",
+        "history": "历史学家的简短评语（必须说明历史典故）"
       },
+      "targetChildIndex": 0,
+      "gender": "male",
       "isPremium": false
     }
   ],
@@ -609,6 +621,8 @@ export const FAST_NAMING_AGENT: AgentConfig = {
 6) 每个方案必须包含 englishName 字段（英文名与中文名寓意或发音关联）
 7) 字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，homophoneCheck.mandarin≤20 字
 8) JSON 必须完整闭合，不得截断
+9) 每个方案必须标注 gender 字段（"male" 或 "female"），明确说明适合男孩还是女孩
+10) 多子女家庭：每个名字方案必须标注 targetChildIndex（从 0 开始），指定该名字是给第几个孩子的
 
 多子女起名要求：
 - 如果有多个子女，每个子女的名字应该相互关联（如共用字辈、同主题、同风格）

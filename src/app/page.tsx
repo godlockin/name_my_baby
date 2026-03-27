@@ -80,6 +80,10 @@ export default function Home() {
         // Handle synchronous response (API may return completed status immediately)
         if (response.status === "completed" && response.names) {
           console.log('[page.tsx] API returned completed status with names');
+          console.log('[page.tsx] === Names from API ===');
+          response.names?.forEach((name, idx) => {
+            console.log(`[page.tsx] Name ${idx}: ${name.chineseName}, gender: ${name?.gender}, targetChildIndex: ${name?.targetChildIndex}`);
+          });
           setNames(response.names);
           setGenerationStatus("completed");
         } else if (response.status === "failed") {
@@ -111,6 +115,11 @@ export default function Home() {
         setPollAttempts(attempt + 1);
 
         if (data.status === "completed" && data.names) {
+          console.log('[page.tsx] Polling completed with names');
+          console.log('[page.tsx] === Names from polling ===');
+          data.names?.forEach((name, idx) => {
+            console.log(`[page.tsx] Name ${idx}: ${name.chineseName}, gender: ${name?.gender}, targetChildIndex: ${name?.targetChildIndex}`);
+          });
           setNames(data.names);
           setGenerationStatus("completed");
         } else if (data.status === "processing") {

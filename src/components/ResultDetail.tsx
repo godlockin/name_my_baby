@@ -188,8 +188,8 @@ export const ResultDetail: React.FC<ResultDetailProps> = ({
           {/* Gender Badge */}
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">适合：</span>
-            <span className={`badge ${name.gender === "male" ? "badge-medium" : "badge-high"}`}>
-              {name.gender === "male" ? "男孩" : name.gender === "female" ? "女孩" : "男孩女孩均可"}
+            <span className={`badge ${name.childGender === "male" ? "badge-medium" : "badge-high"}`}>
+              {name.childGender === "male" ? "男孩" : name.childGender === "female" ? "女孩" : "男孩女孩均可"}
             </span>
           </div>
         </div>
