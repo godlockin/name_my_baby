@@ -67,36 +67,40 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   const [sortBy, setSortBy] = React.useState<"score" | "cultural" | "phonetic">("score");
   const [selectedName, setSelectedName] = React.useState<NameScheme | null>(null);
 
-  // Convert NameScheme to NameResult for display
-  const displayedNames: NameResult[] = React.useMemo(() => {
-    const source = filter === "saved" ? savedNames : names;
-    return source.map(convertToNameResult);
-  }, [names, savedNames, filter]);
+  // Get source array based on filter
+  const sourceArray = filter === "saved" ? savedNames : names;
+
+  // Convert NameScheme to NameResult for display, preserving original index
+  const displayedNames: Array<{ result: NameResult; originalIndex: number }> = React.useMemo(() => {
+    return sourceArray.map((scheme, index) => ({
+      result: convertToNameResult(scheme),
+      originalIndex: index,
+    }));
+  }, [sourceArray]);
 
   const sortedNames = React.useMemo(() => {
     return [...displayedNames].sort((a, b) => {
       switch (sortBy) {
         case "cultural":
-          return b.culturalScore - a.culturalScore;
+          return b.result.culturalScore - a.result.culturalScore;
         case "phonetic":
-          return b.phoneticScore - a.phoneticScore;
+          return b.result.phoneticScore - a.result.phoneticScore;
         case "score":
         default:
-          return b.score - a.score;
+          return b.result.score - a.result.score;
       }
     });
   }, [displayedNames, sortBy]);
 
-  const handleToggleSave = (name: NameResult) => {
-    const isSaved = savedNames.find((n) => n.id === name.id);
+  const handleToggleSave = (name: NameResult, originalIndex: number) => {
+    const originalScheme = sourceArray[originalIndex];
+    if (!originalScheme) return;
+
+    const isSaved = savedNames.find((n) => n.id === originalScheme.id);
     if (isSaved) {
-      removeSavedName(name.id);
+      removeSavedName(originalScheme.id);
     } else {
-      // Find original scheme from names
-      const originalScheme = names.find((n) => n.id === name.id);
-      if (originalScheme) {
-        saveName(originalScheme);
-      }
+      saveName(originalScheme);
     }
   };
 
@@ -167,12 +171,13 @@ export const ResultsList: React.FC<ResultsListProps> = ({
         {/* Results Grid */}
         {sortedNames.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sortedNames.map((name) => (
+            {sortedNames.map(({ result: name, originalIndex }) => (
               <div
-                key={name.id}
+                key={`${filter}-${sourceArray[originalIndex]?.id || originalIndex}`}
                 className="card name-card cursor-pointer"
                 onClick={() => {
-                  const originalScheme = names.find((n) => n.id === name.id) || savedNames.find((n) => n.id === name.id);
+                  // Use the original index to get the correct scheme directly
+                  const originalScheme = sourceArray[originalIndex];
                   if (originalScheme) {
                     setSelectedName(originalScheme);
                   }
@@ -192,11 +197,11 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleToggleSave(name);
+                        handleToggleSave(name, originalIndex);
                       }}
                       className="p-1 hover:bg-gray-100 rounded"
                     >
-                      {savedNames.find((n) => n.id === name.id) ? (
+                      {savedNames.find((n) => n.id === sourceArray[originalIndex]?.id) ? (
                         <svg className="w-5 h-5 text-[var(--color-primary)]" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M5 4a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 20V4z" />
                         </svg>
