@@ -167,7 +167,7 @@ describe('AgentTeam', () => {
       const result = await team.generate(context);
 
       expect(result.length).toBeGreaterThan(0);
-      expect(result[0].englishName).toBeUndefined();
+      expect(result[0].englishName).toBeDefined();
     });
   });
 
