@@ -73,21 +73,11 @@ const convertToNameResult = (scheme: NameScheme, children?: Array<{ gender: "mal
   const targetIndex = scheme.targetChildIndex ?? 0;
   const childFromStore = children && children.length > targetIndex ? children[targetIndex] : undefined;
 
-  console.log(`[convertToNameResult] === ${scheme.chineseName || 'UNKNOWN'} ===`);
-  console.log(`  - scheme.gender: "${scheme.gender}" (type: ${typeof scheme.gender})`);
-  console.log(`  - scheme.targetChildIndex: ${scheme.targetChildIndex}`);
-  console.log(`  - children.length: ${children?.length ?? 0}`);
-  console.log(`  - childFromStore:`, childFromStore ? `gender=${childFromStore.gender}` : 'undefined');
-
-  // Priority: 1) LLM returned gender (must be "male" or "female"), 2) derived from children array
+  // Priority: 1) LLM returned gender (must be exactly "male" or "female"), 2) derived from children array
   if (scheme.gender === "male" || scheme.gender === "female") {
     childGender = scheme.gender;
-    console.log(`  - Using LLM gender: ${childGender}`);
-  } else if (childFromStore?.gender) {
+  } else if (childFromStore?.gender === "male" || childFromStore?.gender === "female") {
     childGender = childFromStore.gender;
-    console.log(`  - Falling back to store gender: ${childGender}`);
-  } else {
-    console.log(`  - No gender available, defaulting to undefined`);
   }
 
   if (childFromStore) {
@@ -124,7 +114,6 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   // Convert NameScheme to NameResult for display, preserving the original ID
   const displayedNames: Array<{ result: NameResult; id: string }> = React.useMemo(() => {
     const source = filter === "saved" ? savedNames : names;
-    console.log(`[ResultsList] children array:`, children, 'length:', children.length);
     return source.map((scheme) => ({
       result: convertToNameResult(scheme, children),
       id: scheme.id,
