@@ -260,6 +260,16 @@ export class AgentTeam {
         }
       }
 
+      // Add homophoneCheck if missing (fallback to safe default)
+      if (!processed.homophoneCheck) {
+        processed.homophoneCheck = {
+          mandarin: "safe",
+          dialects: [],
+          english: "safe",
+          overall: "safe"
+        };
+      }
+
       // Ensure agentNotes has at least some content
       if (!processed.agentNotes) {
         processed.agentNotes = {};
@@ -522,6 +532,16 @@ export class AgentTeam {
         }
       }
 
+      // Add homophoneCheck if missing (fallback to safe default)
+      if (!processed.homophoneCheck) {
+        processed.homophoneCheck = {
+          mandarin: "safe",
+          dialects: [],
+          english: "safe",
+          overall: "safe"
+        };
+      }
+
       // Ensure agentNotes has at least some content
       if (!processed.agentNotes) {
         processed.agentNotes = {};
@@ -608,6 +628,16 @@ export class AgentTeam {
         if (targetChild) {
           processed.gender = targetChild.gender;
         }
+      }
+
+      // Add homophoneCheck if missing (fallback to safe default)
+      if (!processed.homophoneCheck) {
+        processed.homophoneCheck = {
+          mandarin: "safe",
+          dialects: [],
+          english: "safe",
+          overall: "safe"
+        };
       }
 
       // Ensure agentNotes has at least some content
