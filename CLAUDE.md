@@ -333,6 +333,7 @@ Located in `tests/e2e/`. Tests cover:
 2. **Validation test** - Required field validation
 3. **Children management test** - Add/remove children (1-4 limit)
 4. **API data format test** - Verifies children data is formatted correctly
+5. **Gender display test** - Verifies gender badges show correctly (男孩/女孩 instead of 通用)
 
 ```bash
 # Run all E2E tests
@@ -343,6 +344,9 @@ npm run test:headed
 
 # Run specific test file
 npx playwright test tests/e2e/regression.test.ts
+
+# Run gender display test
+npx playwright test tests/e2e/gender-display.test.ts
 
 # Run with UI
 npm run test:ui
