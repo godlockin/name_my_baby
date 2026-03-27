@@ -29,6 +29,9 @@ const TEST_DATA = {
 };
 
 test.describe('Gender Display Test', () => {
+  // Increase timeout for all tests in this suite to 3 minutes
+  test.setTimeout(180000);
+
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await page.goto('http://localhost:3001');
@@ -52,8 +55,8 @@ test.describe('Gender Display Test', () => {
     
     // Add second child (girl)
     await page.getByRole('button', { name: '+ 添加子女' }).click();
-    await page.waitForTimeout(300);
-    
+    await page.waitForTimeout(100);
+
     // Fill second child gender
     await page.locator('label').filter({ hasText: '女' }).first().click();
     await page.selectOption('select[aria-label="出生年份"]', TEST_DATA.child2.birthYear.toString());
@@ -84,8 +87,8 @@ test.describe('Gender Display Test', () => {
     // Submit form
     await page.getByRole('button', { name: '开始起名' }).click();
 
-    // Wait for results page (with longer timeout for API call)
-    await page.waitForSelector('text=起名结果', { timeout: 60000 });
+    // Wait for results page (with longer timeout for API call - up to 2 minutes)
+    await page.waitForSelector('text=起名结果', { timeout: 120000 });
     await page.waitForTimeout(1000);
 
     // Check for gender badges
