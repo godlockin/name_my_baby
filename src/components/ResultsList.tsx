@@ -67,16 +67,14 @@ export const ResultsList: React.FC<ResultsListProps> = ({
   const [sortBy, setSortBy] = React.useState<"score" | "cultural" | "phonetic">("score");
   const [selectedName, setSelectedName] = React.useState<NameScheme | null>(null);
 
-  // Get source array based on filter
-  const sourceArray = filter === "saved" ? savedNames : names;
-
-  // Convert NameScheme to NameResult for display, preserving original index
-  const displayedNames: Array<{ result: NameResult; originalIndex: number }> = React.useMemo(() => {
-    return sourceArray.map((scheme, index) => ({
+  // Convert NameScheme to NameResult for display, preserving the original ID
+  const displayedNames: Array<{ result: NameResult; id: string }> = React.useMemo(() => {
+    const source = filter === "saved" ? savedNames : names;
+    return source.map((scheme) => ({
       result: convertToNameResult(scheme),
-      originalIndex: index,
+      id: scheme.id,
     }));
-  }, [sourceArray]);
+  }, [names, savedNames, filter]);
 
   const sortedNames = React.useMemo(() => {
     return [...displayedNames].sort((a, b) => {
@@ -92,16 +90,22 @@ export const ResultsList: React.FC<ResultsListProps> = ({
     });
   }, [displayedNames, sortBy]);
 
-  const handleToggleSave = (name: NameResult, originalIndex: number) => {
-    const originalScheme = sourceArray[originalIndex];
+  // Get original scheme by ID from the correct source array
+  const getOriginalScheme = (id: string): NameScheme | null => {
+    const source = filter === "saved" ? savedNames : names;
+    return source.find((n) => n.id === id) || null;
+  };
+
+  const handleToggleSave = (id: string) => {
+    const originalScheme = getOriginalScheme(id);
     if (!originalScheme) {
-      console.error('[ResultsList] No scheme found at index:', originalIndex, 'filter:', filter, 'sourceArray length:', sourceArray.length);
+      console.error('[ResultsList] No scheme found for id:', id);
       return;
     }
 
-    const isSaved = savedNames.find((n) => n.id === originalScheme.id);
+    const isSaved = savedNames.find((n) => n.id === id);
     if (isSaved) {
-      removeSavedName(originalScheme.id);
+      removeSavedName(id);
     } else {
       saveName(originalScheme);
     }
@@ -174,18 +178,17 @@ export const ResultsList: React.FC<ResultsListProps> = ({
         {/* Results Grid */}
         {sortedNames.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sortedNames.map(({ result: name, originalIndex }, arrayIndex) => (
+            {sortedNames.map(({ result: name, id }) => (
               <div
-                key={`${filter}-${sourceArray[originalIndex]?.id || originalIndex}-${arrayIndex}`}
+                key={`${filter}-${id}`}
                 className="card name-card cursor-pointer"
                 onClick={() => {
-                  // Use the original index to get the correct scheme directly
-                  const originalScheme = sourceArray[originalIndex];
+                  const originalScheme = getOriginalScheme(id);
                   if (!originalScheme) {
-                    console.error('[ResultsList] Click: No scheme found at index:', originalIndex, 'filter:', filter, 'sourceArray length:', sourceArray.length);
+                    console.error('[ResultsList] Click: No scheme found for id:', id);
                     return;
                   }
-                  console.log('[ResultsList] Click: Selected name:', originalScheme.chineseName, 'id:', originalScheme.id, 'index:', originalIndex);
+                  console.log('[ResultsList] Click: Selected name:', originalScheme.chineseName, 'id:', id);
                   setSelectedName(originalScheme);
                 }}
               >
@@ -203,11 +206,11 @@ export const ResultsList: React.FC<ResultsListProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleToggleSave(name, originalIndex);
+                        handleToggleSave(id);
                       }}
                       className="p-1 hover:bg-gray-100 rounded"
                     >
-                      {savedNames.find((n) => n.id === sourceArray[originalIndex]?.id) ? (
+                      {savedNames.find((n) => n.id === id) ? (
                         <svg className="w-5 h-5 text-[var(--color-primary)]" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M5 4a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 20V4z" />
                         </svg>

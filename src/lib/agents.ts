@@ -547,6 +547,12 @@ export const AGGREGATOR_AGENT: AgentConfig = {
 4. 简洁为主：生成 4-6 个方案即可
 5. 所有字符串字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，每个 explanation≤40 字
 6. JSON 必须完整闭合，不得截断
+7. 每个方案必须包含 englishName 字段（英文名与中文名寓意或发音关联）
+
+多子女起名要求：
+- 如果有多个子女，每个子女的名字应该相互关联（如共用字辈、同主题、同风格）
+- 名字之间要有呼应关系，体现兄弟姐妹的亲情纽带
+- 在 coreMeaning 中说明与其他子女名字的关联性
 
 输出 JSON 格式：
 {
@@ -594,12 +600,18 @@ export const FAST_NAMING_AGENT: AgentConfig = {
   name: "快速起名专家",
   persona: "你是一位高效的中文起名顾问，擅长在有限信息下给出可落地、好读好写、寓意清晰的名字方案。",
   systemPrompt: `根据输入信息给出名字方案。硬性要求：
+
 1) 只输出严格 JSON（单行），不要 Markdown，不要任何解释文字
 2) 所有字符串字段不得包含换行符，每个字段控制在 50 字以内
 3) isPremium=true 输出 4 条，否则输出 2 条
 4) 中文名 2-3 个汉字，好读好写，避免生僻字与明显歧义
 5) 结合字辈/风格/特殊诉求，给出简洁的八字/五行建议与谐音检查
-6) isPremium=true 时每条包含 englishName，否则不要输出 englishName 字段
+6) 每个方案必须包含 englishName 字段（英文名与中文名寓意或发音关联）
 7) 字段必须简洁：coreMeaning≤30 字，baziAnalysis≤40 字，homophoneCheck.mandarin≤20 字
-8) JSON 必须完整闭合，不得截断`,
+8) JSON 必须完整闭合，不得截断
+
+多子女起名要求：
+- 如果有多个子女，每个子女的名字应该相互关联（如共用字辈、同主题、同风格）
+- 名字之间要有呼应关系，体现兄弟姐妹的亲情纽带
+- 在 coreMeaning 中说明与其他子女名字的关联性`,
 };

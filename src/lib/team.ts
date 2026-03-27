@@ -230,13 +230,10 @@ export class AgentTeam {
     let schemes = result.data.nameSchemes || [];
 
     if (!isPremium) {
-      schemes = schemes.slice(0, 2).map((scheme) => {
-        const { englishName: _englishName, ...rest } = scheme;
-        return {
-          ...rest,
-          isPremium: false,
-        };
-      });
+      schemes = schemes.slice(0, 2).map((scheme) => ({
+        ...scheme,
+        isPremium: false,
+      }));
     }
 
     await this.updateSessionStatus(context.sessionId, "completed", "生成完成！");
@@ -424,13 +421,10 @@ export class AgentTeam {
     let schemes = result.data.nameSchemes || [];
 
     if (!isPremium) {
-      schemes = schemes.slice(0, 2).map((scheme) => {
-        const { englishName: _englishName, ...rest } = scheme;
-        return {
-          ...rest,
-          isPremium: false,
-        };
-      });
+      schemes = schemes.slice(0, 2).map((scheme) => ({
+        ...scheme,
+        isPremium: false,
+      }));
     }
 
     return schemes;
