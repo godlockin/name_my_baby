@@ -13,22 +13,40 @@ npm run build
 ./scripts/prepare-deploy.sh
 ```
 
-### 2. 配置生产环境 Secrets
+### 2. 测试 API Key（可选但推荐）
+
+在配置到生产环境前，先验证 API Key 是否有效：
+
+```bash
+# 测试 Gemini API Key
+./scripts/test-gemini-key.sh [YOUR_API_KEY]
+# 或：export GEMINI_API_KEY=xxx && ./scripts/test-gemini-key.sh
+
+# 测试智谱 AI API Key
+./scripts/test-zhipu-key.sh [YOUR_API_KEY]
+# 或：export ZHIPU_API_KEY=xxx && ./scripts/test-zhipu-key.sh
+```
+
+### 3. 配置生产环境 Secrets
 
 通过 Cloudflare CLI 配置环境变量（需要登录到 Cloudflare 账户）：
 
 ```bash
-# Gemini API Key（必需 - 如果用作主要 LLM provider）
-echo "$GEMINI_API_KEY" | wrangler pages secret put GEMINI_API_KEY --project-name=name-my-baby
+# 从 .env 文件读取并配置（推荐）
+GEMINI_KEY=$(grep "^GEMINI_API_KEY=" .env | cut -d'=' -f2-)
+echo "$GEMINI_KEY" | wrangler pages secret put GEMINI_API_KEY --project-name=name-my-baby
 
-# Zhipu API Key（必需 - 如果用作备用 LLM provider）
-echo "$ZHIPU_API_KEY" | wrangler pages secret put ZHIPU_API_KEY --project-name=name-my-baby
+ZHIPU_KEY=$(grep "^ZHIPU_API_KEY=" .env | cut -d'=' -f2-)
+echo "$ZHIPU_KEY" | wrangler pages secret put ZHIPU_API_KEY --project-name=name-my-baby
+
+# 或直接传入值
+echo "your_api_key_here" | wrangler pages secret put GEMINI_API_KEY --project-name=name-my-baby
 
 # 默认 LLM Provider（可选，默认：gemini）
-echo "zhipu" | wrangler pages secret put DEFAULT_LLM_PROVIDER --project-name=name-my-baby
+echo "gemini" | wrangler pages secret put DEFAULT_LLM_PROVIDER --project-name=name-my-baby
 
 # 后门邀请码（测试用，逗号分隔多个代码）
-echo "BACKDOOR" | wrangler pages secret put BACKDOOR_INVITE_CODES --project-name=name-my-baby
+echo "COLA001" | wrangler pages secret put BACKDOOR_INVITE_CODES --project-name=name-my-baby
 
 # API 管理密钥（可选 - 保护管理员 API）
 echo "your_admin_secret" | wrangler pages secret put API_SECRET --project-name=name-my-baby
@@ -38,8 +56,9 @@ echo "your_admin_secret" | wrangler pages secret put API_SECRET --project-name=n
 - Secrets 配置后，新部署会自动应用
 - 如果 Secrets 不生效，需要在 Cloudflare Dashboard 手动验证
 - Secrets 不会显示在部署日志中，只能通过 Dashboard 查看
+- 至少配置一个 LLM provider 的 API Key（GEMINI_API_KEY 或 ZHIPU_API_KEY）
 
-### 3. 部署到 Cloudflare Pages
+### 4. 部署到 Cloudflare Pages
 
 ```bash
 # 部署到 main 分支（生产环境）
@@ -49,20 +68,21 @@ wrangler pages deploy .vercel/output --project-name=name-my-baby --branch=main -
 部署成功后会返回：
 - 临时预览 URL：`https://[commit-hash].name-my-baby-eh8.pages.dev`
 - 分支 URL：`https://main.name-my-baby-eh8.pages.dev`
+- 自定义域名（如已绑定）：`https://name-my-baby.331912.xyz/`
 
-### 4. 验证部署
+### 5. 验证部署
 
 ```bash
-# 测试静态页面加载
-curl -s https://main.name-my-baby-eh8.pages.dev | head -20
+# 测试静态页面加载（检查是否指向最新版本）
+curl -s https://name-my-baby.331912.xyz/ | grep -o "page-[a-f0-9]*.js"
 
 # 测试邀请码验证 API
-curl -s -X POST https://main.name-my-baby-eh8.pages.dev/api/invite/verify \
+curl -s -X POST https://name-my-baby.331912.xyz/api/invite/verify \
   -H "Content-Type: application/json" \
-  -d '{"code":"BACKDOOR","deviceId":"test-device"}'
+  -d '{"code":"COLA001","deviceId":"test-device"}'
 
-# 测试完整生成流程（需要有效的邀请码）
-curl -s -X POST https://main.name-my-baby-eh8.pages.dev/api/generate \
+# 测试完整生成流程
+SESSION=$(curl -s -X POST https://name-my-baby.331912.xyz/api/generate \
   -H "Content-Type: application/json" \
   -d '{
     "fatherName":"张三",
@@ -74,12 +94,16 @@ curl -s -X POST https://main.name-my-baby-eh8.pages.dev/api/generate \
       "birthDay":15,
       "birthHour":"08"
     }],
-    "inviteCode":"BACKDOOR",
+    "inviteCode":"COLA001",
     "deviceId":"test-device-123"
-  }'
+  }' | jq -r '.sessionId')
+
+# 等待 30-60 秒后检查结果
+sleep 30
+curl -s https://name-my-baby.331912.xyz/api/job/$SESSION | jq '.status, (.names | length)'
 ```
 
-### 5. 绑定自定义域名
+### 6. 绑定自定义域名（如未自动生效）
 
 **通过 Cloudflare Dashboard 操作**：
 
@@ -88,14 +112,16 @@ curl -s -X POST https://main.name-my-baby-eh8.pages.dev/api/generate \
 3. 进入 **Settings** → **Custom domains**
 4. 点击 **Add custom domain**
 5. 输入域名：`name-my-baby.331912.xyz`
-6. 选择绑定到 **Production** 分支 (main)
+6. 选择绑定到 **Production** 分支
 7. 确认 DNS 记录已正确配置
 
 **DNS 配置要求**：
 - 如果使用 Cloudflare DNS：自动配置 CNAME
 - 如果外部 DNS：添加 CNAME 记录指向 `name-my-baby-eh8.pages.dev`
 
-### 6. D1 数据库初始化
+**注意**：对于没有 Git 集成的项目，自定义域名默认指向最新部署，无需手动绑定。
+
+### 7. D1 数据库初始化
 
 如果是首次部署，需要初始化数据库：
 
